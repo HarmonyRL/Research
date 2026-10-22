@@ -19,6 +19,7 @@ from harmonyrl.data import (
 	alignment_report,
 	load_json_gz,
 	prepare_dataset,
+	tempos_by_id,
 	usable_ids,
 	write_segments,
 )
@@ -50,6 +51,11 @@ def main() -> None:
 		by_split[segment.split].append(segment)
 	for split, group in by_split.items():
 		write_segments(group, output_dir / f"segments_{split.value}.jsonl")
+
+	tempos = tempos_by_id(raw, (segment.id for segment in segments))
+	(output_dir / "tempos.json").write_text(
+		json.dumps(tempos, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+	)
 
 	def meter_of(sid: str) -> str:
 		entry = simple[sid]["annotations"]["meters"][0]
@@ -92,6 +98,7 @@ def main() -> None:
 			"key_spans_dropped_at_end": report.key_spans_dropped_at_end,
 		},
 		"projection": _projection(segments),
+		"tempos": {"with_tempo": len(tempos), "fallback": len(segments) - len(tempos)},
 	}
 	(output_dir / "meta.json").write_text(
 		json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"

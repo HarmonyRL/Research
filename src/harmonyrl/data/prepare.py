@@ -1,6 +1,6 @@
 """Filtering joined items and converting them into contract Segments."""
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from fractions import Fraction
 from math import ceil, floor
@@ -91,6 +91,21 @@ def usable_ids(
 			continue
 		ids.append(sid)
 	return ids, both_present, meter_change
+
+
+def tempos_by_id(raw: Mapping[str, Mapping[str, Any]], ids: Iterable[str]) -> dict[str, int]:
+	"""First recorded tempo in bpm per item, skipping items without a usable value.
+
+	Rendering plays each segment at its source tempo; items with no tempo (or 0) fall
+	back to a fixed default at render time.
+	"""
+	tempos: dict[str, int] = {}
+	for sid in ids:
+		entries = (raw[sid].get("json") or {}).get("tempos") or []
+		bpm = entries[0].get("bpm") if entries else None
+		if isinstance(bpm, int) and bpm > 0:
+			tempos[sid] = bpm
+	return tempos
 
 
 def _usable(simple_item: Mapping[str, Any]) -> bool:

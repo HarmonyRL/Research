@@ -1,6 +1,8 @@
 """Segment serialization to and from JSON lines."""
 
 import json
+import os
+import tempfile
 from collections.abc import Iterable, Mapping
 from fractions import Fraction
 from pathlib import Path
@@ -87,10 +89,14 @@ def segment_from_dict(data: Mapping[str, Any]) -> Segment:
 
 
 def write_segments(segments: Iterable[Segment], path: Path) -> None:
-	"""Write one JSON object per line."""
-	with path.open("w", encoding="utf-8") as f:
+	"""Write one JSON object per line, replacing `path` atomically."""
+	with tempfile.NamedTemporaryFile(
+		"w", dir=path.parent, suffix=".tmp", delete=False, encoding="utf-8"
+	) as f:
 		for segment in segments:
 			f.write(json.dumps(segment_to_dict(segment), ensure_ascii=False) + "\n")
+		temp = Path(f.name)
+	os.replace(temp, path)
 
 
 def read_segments(path: Path) -> list[Segment]:

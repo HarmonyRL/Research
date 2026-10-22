@@ -63,7 +63,7 @@ def project(chord: RawChord, key: Key) -> RawChord:
 	"""Nearest chord the vocabulary can represent.
 
 	Only a borrowed scale given as offsets is not representable. It becomes the mode,
-	or no borrowing, whose chord shraes the most pitch classes with the original.
+	or no borrowing, whose chord shares the most pitch classes with the original.
 	"""
 	if not isinstance(chord.borrowed, tuple):
 		return chord

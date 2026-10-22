@@ -9,10 +9,12 @@ authors = [{ name = "CloudHolic", email = "cloudholic@pm.me" }]
 requires-python = ">=3.14"
 dependencies = [
 	"gymnasium>=1.4.0",
+	"huggingface-hub>=2.2.0",
 	"music21>=10.5.0",
 	"numpy>=2.5.4",
 	"pretty-midi>=0.2.11.post0",
 	"pyyaml>=6.0.3",
+	"safetensors>=0.8.0",
 	"torch>=2.14.1",
 ]
 
@@ -34,4 +36,24 @@ indent-style = "tab"
 quote-style = "double"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "A", "B", "C4", "N", "PIE", "RET", "RUF", "SIM", "UP"]
+select = [
+	"E",
+	"F",
+	"I",
+	"A",
+	"B",
+	"C4",
+	"N",
+	"NPY",
+	"PIE",
+	"RET",
+	"RUF",
+	"SIM",
+	"UP",
+]
+
+[[tool.ty.overrides]]
+include = ["src/harmonyrl/models", "src/harmonyrl/rl"]
+
+[tool.ty.overrides.rules]
+invalid-mutable-override = "ignore"

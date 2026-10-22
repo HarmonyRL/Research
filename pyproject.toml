@@ -12,6 +12,7 @@ dependencies = [
 	"music21>=10.5.0",
 	"numpy>=2.5.4",
 	"pretty-midi>=0.2.11.post0",
+	"pyyaml>=6.0.3",
 	"torch>=2.14.1",
 ]
 

@@ -90,7 +90,6 @@ def main() -> None:
 			"no_chord_collapsed": report.no_chord_collapsed,
 			"key_starts_snapped": report.key_starts_snapped,
 			"key_spans_dropped_at_end": report.key_spans_dropped_at_end,
-			"key_spans_merged_short": report.key_spans_merged_short,
 		},
 		"projection": _projection(segments),
 	}

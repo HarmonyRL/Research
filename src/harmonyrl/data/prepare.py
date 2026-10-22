@@ -46,7 +46,6 @@ class PreparationReport:
 	no_chord_collapsed: int = 0
 	key_starts_snapped: int = 0
 	key_spans_dropped_at_end: int = 0
-	key_spans_merged_short: int = 0
 
 
 def prepare_dataset(
@@ -202,7 +201,7 @@ def _key_spans(
 	length: int,
 	report: PreparationReport,
 ) -> tuple[KeySpan, ...]:
-	"""Local keys over [0, length] with degenerate and sub-bar spans merged away."""
+	"""Local keys over [0, length], dropping only spans that start at or beyond the end."""
 	scale = Fraction(8, meter.beat_unit)
 	spans = []
 	for key in simple_item["annotations"]["keys"]:
@@ -221,21 +220,8 @@ def _key_spans(
 	within = [(start, key) for start, key in deduped if start < length]
 	report.key_spans_dropped_at_end += len(deduped) - len(within)
 
-	kept: list[tuple[int, Key]] = []
-	for i, (start, key) in enumerate(within):
-		end = within[i + 1][0] if i + 1 < len(within) else length
-		if end - start < meter.bar_eighths:
-			report.key_spans_merged_short += 1
-			continue
-		kept.append((start, key))
-	if not kept:
-		kept = [(0, within[0][1])]
-	elif kept[0][0] > 0:
-		kept[0] = (0, kept[0][1])
-		report.key_spans_merged_short += 1
-
-	distinct = [kept[0]]
-	for span in kept[1:]:
+	distinct = [within[0]]
+	for span in within[1:]:
 		if span[1] != distinct[-1][1]:
 			distinct.append(span)
 	return tuple(KeySpan(start, key) for start, key in distinct)

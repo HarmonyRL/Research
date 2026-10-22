@@ -1,0 +1,34 @@
+[project]
+name = "harmonyrl"
+version = "0.1.0"
+description = "Melody harmonization with reinforcement learning"
+readme = "README.md"
+authors = [{ name = "CloudHolic", email = "cloudholic@pm.me" }]
+requires-python = ">=3.14"
+dependencies = [
+	"gymnasium>=1.4.0",
+	"music21>=10.5.0",
+	"numpy>=2.5.4",
+	"pretty-midi>=0.2.11.post0",
+	"torch>=2.14.1",
+]
+
+[dependency-groups]
+dev = ["pytest>=9.1.1", "ruff>=0.17.1", "ty>=0.0.90"]
+
+[build-system]
+requires = ["hatchling>=1.32.4"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/harmonyrl"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.format]
+indent-style = "tab"
+quote-style = "double"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "A", "B", "C4", "N", "PIE", "RET", "RUF", "SIM", "UP"]

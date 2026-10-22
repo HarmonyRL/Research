@@ -1,0 +1,6 @@
+# Source and output locations for dataset preparation. The source directory is the
+# local read-only clone of chrisdonahue/sheetsage-data.
+source_dir: ~/projects/sheetsage-data/hooktheory
+simplified_file: Hooktheory.json.gz
+raw_file: Hooktheory_Raw.json.gz
+output_dir: data/processed

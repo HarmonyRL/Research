@@ -225,3 +225,7 @@ __marimo__/
 /scratch/
 /AGENTS.md
 /CLAUDE.md
+
+# Data and run outputs
+/data/
+/runs/

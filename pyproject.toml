@@ -2,6 +2,8 @@
 name = "harmonyrl"
 version = "0.1.0"
 description = "Melody harmonization with reinforcement learning"
+license = "MIT"
+license-files = ["LICENSE"]
 readme = "README.md"
 authors = [{ name = "CloudHolic", email = "cloudholic@pm.me" }]
 requires-python = ">=3.14"

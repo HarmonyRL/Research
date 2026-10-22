@@ -17,9 +17,9 @@ import yaml
 from harmonyrl.data import read_segments
 from harmonyrl.render import (
 	DEFAULT_TEMPO,
+	melody_to_score,
 	midi_to_wav,
 	musicxml_to_formats,
-	segment_to_score,
 	write_midi,
 	write_score,
 )
@@ -68,7 +68,7 @@ def main() -> None:
 		tempo = tempos.get(segment.id, config.get("default_tempo", DEFAULT_TEMPO))
 		base = output / segment.id
 		if "midi" in formats or "wav" in formats:
-			write_midi(segment, base.with_suffix(".mid"), tempo)
+			write_midi(segment.melody, segment.events, base.with_suffix(".mid"), tempo)
 		if "wav" in formats:
 			midi_to_wav(
 				base.with_suffix(".mid"),
@@ -79,7 +79,10 @@ def main() -> None:
 			)
 		targets = {}
 		if {"musicxml", "pdf", "mscz", "mscx"} & set(formats):
-			write_score(segment_to_score(segment), base.with_suffix(".musicxml"))
+			write_score(
+				melody_to_score(segment.melody, segment.events, tempo=tempo),
+				base.with_suffix(".musicxml"),
+			)
 		if "pdf" in formats:
 			targets["pdf"] = base.with_suffix(".pdf")
 		if "mscz" in formats:

@@ -5,10 +5,11 @@ experiments. The bass sits in the octave starting at C2 and the remaining chord 
 are packed in ascending order from C3 upward.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from fractions import Fraction
 
-from harmonyrl.schema import Segment, chord_pitch_classes
+from harmonyrl.schema import ChordEvent, Melody, chord_pitch_classes
 
 BASS_BOTTOM = 36
 """MIDI note of the bass voice octave (C2)."""
@@ -37,20 +38,27 @@ class VoicedNote:
 	velocity: int
 
 
-def melody_notes(segment: Segment) -> tuple[VoicedNote, ...]:
+def check_tiling(melody: Melody, events: Sequence[ChordEvent]) -> None:
+	"""Verify the events tile the melody, which every rendering input must satisfy."""
+	total = sum(event.duration for event in events)
+	if total != melody.length:
+		raise ValueError(f"event durations sum to {total}, melody length is {melody.length}")
+
+
+def melody_notes(melody: Melody) -> tuple[VoicedNote, ...]:
 	return tuple(
 		VoicedNote(note.onset, note.duration, note.pitch, MELODY_PROGRAM, MELODY_VELOCITY)
-		for note in segment.melody.notes
+		for note in melody.notes
 	)
 
 
-def chord_notes(segment: Segment) -> tuple[VoicedNote, ...]:
-	"""Deterministic voicing of every chord event in the segment."""
+def chord_notes(melody: Melody, events: Sequence[ChordEvent]) -> tuple[VoicedNote, ...]:
+	"""Deterministic voicing of every chord event over the melody."""
 	position = Fraction(0)
 	notes: list[VoicedNote] = []
-	for event in segment.events:
+	for event in events:
 		if event.chord is not None:
-			key = segment.melody.key_at(position)
+			key = melody.key_at(position)
 			bass_pc, pitch_classes = chord_pitch_classes(event.chord, key)
 			for pitch in _voice_chord(bass_pc, pitch_classes):
 				notes.append(

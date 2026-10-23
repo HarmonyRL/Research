@@ -1,7 +1,9 @@
 """ChordPolicy: a melody encoder and an autoregressive decoder over chord events."""
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Self
 
 import torch
 from huggingface_hub import PyTorchModelHubMixin
@@ -9,9 +11,9 @@ from torch import nn
 
 from harmonyrl.schema import HEAD_VALUES, MAX_DURATION
 
-from .attention import Block
-from .batch import Batch
-from .features import (
+from ..attention import Block
+from ..batch import Batch
+from ..features import (
 	BAR_POSITIONS,
 	BEAT_STRENGTHS,
 	IGNORE,
@@ -22,9 +24,25 @@ from .features import (
 )
 
 
-def head_values_json() -> dict[str, list]:
-	"""`HEAD_VALUES` as a checkpoint config stores it, with modes as strings and tuples as lists."""
+def _head_values_json() -> dict[str, list]:
 	return json.loads(json.dumps(HEAD_VALUES))
+
+
+@dataclass(frozen=True)
+class PolicyConfig:
+	"""Structure of `ChordPolicy`, which `save_pretrained` stores as `config.json`.
+
+	`head_values` is the vocabulary the output heads index: `HEAD_VALUES` with modes as strings
+	and tuples as lists, so that a checkpoint can be checked against the code that loads it.
+	"""
+
+	dim: int = 384
+	attention_heads: int = 4
+	encoder_layers: int = 4
+	decoder_layers: int = 4
+	ff_mult: int = 4
+	dropout: float = 0.3
+	head_values: dict[str, list] = field(default_factory=_head_values_json)
 
 
 @dataclass(frozen=True)
@@ -42,26 +60,22 @@ class ChordPolicy(nn.Module, PyTorchModelHubMixin, license="cc-by-nc-sa-3.0"):
 	"""π(chord events | melody), factorized over events and over the heads of each event.
 
 	Heads are predicted in `HEAD_VALUES` order, each conditioned on the heads before it.
-	The structure depends only on the constructor arguments, which `save_pretrained` stores.
 	"""
 
 	not_predicted: torch.Tensor
 	"""Per head, the value index that stands for a head not predicted."""
 
-	def __init__(
-		self,
-		head_values: dict[str, list],
-		dim: int = 256,
-		attention_heads: int = 4,
-		encoder_layers: int = 4,
-		decoder_layers: int = 4,
-		ff_mult: int = 4,
-		dropout: float = 0.1,
-	) -> None:
+	def __init__(self, config: PolicyConfig) -> None:
 		super().__init__()
 
-		if head_values != head_values_json():
+		if config.head_values != _head_values_json():
 			raise ValueError("head_values differ from the HEAD_VALUES of this code")
+
+		self.config = config
+		dim = config.dim
+		attention_heads = config.attention_heads
+		ff_mult = config.ff_mult
+		dropout = config.dropout
 
 		sizes = {head: len(values) for head, values in HEAD_VALUES.items()}
 		self.register_buffer("not_predicted", torch.tensor(list(sizes.values())), persistent=False)
@@ -86,14 +100,15 @@ class ChordPolicy(nn.Module, PyTorchModelHubMixin, license="cc-by-nc-sa-3.0"):
 		)
 		self.encoder = nn.ModuleList(
 			Block(dim, attention_heads, ff_mult, dropout, cross=False)
-			for _ in range(encoder_layers)
+			for _ in range(config.encoder_layers)
 		)
 		self.encoder_norm = nn.LayerNorm(dim)
 
 		self.previous = nn.ModuleList(nn.Embedding(size + 1, dim) for size in sizes.values())
 		self.remaining = nn.Embedding(MAX_DURATION + 1, dim)
 		self.decoder = nn.ModuleList(
-			Block(dim, attention_heads, ff_mult, dropout, cross=True) for _ in range(decoder_layers)
+			Block(dim, attention_heads, ff_mult, dropout, cross=True)
+			for _ in range(config.decoder_layers)
 		)
 		self.decoder_norm = nn.LayerNorm(dim)
 
@@ -103,6 +118,37 @@ class ChordPolicy(nn.Module, PyTorchModelHubMixin, license="cc-by-nc-sa-3.0"):
 		)
 		self.chosen = nn.ModuleList(
 			nn.Embedding(size + 1, dim) for size in list(sizes.values())[:-1]
+		)
+
+	@classmethod
+	def _from_pretrained(
+		cls,
+		*,
+		model_id: str,
+		revision: str | None,
+		cache_dir: str | Path | None,
+		force_download: bool,
+		local_files_only: bool,
+		token: str | bool | None,
+		map_location: str = "cpu",
+		strict: bool = True,
+		**model_kwargs: Any,
+	) -> Self:
+		"""Load as `PyTorchModelHubMixin` does, but strictly by default.
+
+		The mixin defaults to `strict=False`, which leaves a weight whose name no longer matches
+		the code at its random initial value without an error.
+		"""
+		return super()._from_pretrained(
+			model_id=model_id,
+			revision=revision,
+			cache_dir=cache_dir,
+			force_download=force_download,
+			local_files_only=local_files_only,
+			token=token,
+			map_location=map_location,
+			strict=strict,
+			**model_kwargs,
 		)
 
 	def encode(self, batch: Batch) -> torch.Tensor:

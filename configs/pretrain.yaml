@@ -1,4 +1,5 @@
-# Pretraining of the chord policy π_ref. `model` holds ChordPolicy constructor arguments.
+# Pretraining of the chord policy π_ref.
+# `model` holds PolicyConfig fields and `train` PretrainArguments fields.
 data_dir: data/processed
 run_dir: runs/pretrain
 seed: 0

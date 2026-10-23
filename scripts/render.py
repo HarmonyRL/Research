@@ -34,7 +34,7 @@ _SCORE_FORMATS = frozenset({"musicxml", "pdf", "png", "mscz", "mscx"})
 
 def main() -> None:
 	parser = argparse.ArgumentParser(description=__doc__)
-	parser.add_argument("--config", default="configs/render.yaml", type=Path)
+	parser.add_argument("--config", default="configs/rendering.yaml", type=Path)
 	parser.add_argument(
 		"--segments",
 		nargs="+",

@@ -1,0 +1,7 @@
+# HMM baseline after Yeh et al. (2021). `model` holds HMMConfig fields; beta is the paper's value.
+data_dir: data/processed
+run_dir: runs/hmm
+model:
+    min_count: 20
+    beta: 0.08
+    min_variance: 0.03

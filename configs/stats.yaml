@@ -1,6 +1,5 @@
 # Source and output locations for dataset statistics.
 source_dir: ~/projects/sheetsage-data/hooktheory
-simplified_file: Hooktheory.json.gz
 raw_file: Hooktheory_Raw.json.gz
 processed_dir: data/processed
 output_dir: runs/stats/baseline

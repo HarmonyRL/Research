@@ -52,7 +52,7 @@ def _pair_page(pair: Pair, queue_length: int, results_path: Path) -> None:
 	left_is_a = st.session_state.order[pair.pair_id]
 	left, right = (pair.a_path, pair.b_path) if left_is_a else (pair.b_path, pair.a_path)
 	st.progress(st.session_state.index / max(1, queue_length))
-	st.subheader(f"쌍 {st.session_state.index + 1} / {queue_length}")
+	st.subheader(f"{st.session_state.index + 1} / {queue_length}")
 
 	missing = [path for path in (left, right) if not path.is_file()]
 	if missing:
@@ -66,6 +66,8 @@ def _pair_page(pair: Pair, queue_length: int, results_path: Path) -> None:
 	with right_col:
 		st.caption("오른쪽 샘플")
 		st.audio(right.read_bytes(), format=_audio_format(right))
+
+	_show_scores(left, right)
 
 	started = st.session_state.pair_started
 	choice = None
@@ -88,6 +90,39 @@ def _pair_page(pair: Pair, queue_length: int, results_path: Path) -> None:
 
 def _audio_format(path: Path) -> str:
 	return _AUDIO_FORMATS.get(path.suffix.lower(), "audio/wav")
+
+
+def _show_scores(left: Path, right: Path) -> None:
+	"""Show both scores full-width in tabs: half-column images are too small to read.
+
+	Each side falls back to its PDF in an iframe when page images were not rendered."""
+	if not (_score_pages(left) or _score_pages(right)):
+		return
+	left_tab, right_tab = st.tabs(["왼쪽 악보", "오른쪽 악보"])
+	with left_tab:
+		_show_score(left)
+	with right_tab:
+		_show_score(right)
+
+
+def _score_pages(audio_path: Path) -> list[Path]:
+	"""Page images the rendering pipeline wrote next to the audio, if any."""
+	return sorted(audio_path.parent.glob(f"{audio_path.stem}-*.png"))
+
+
+def _show_score(audio_path: Path) -> None:
+	"""Show the score rendered next to the audio, when one exists.
+
+	The rendering pipeline writes each segment's files under one name, so the score
+	lives at the audio path with a swapped suffix. Chrome blocks PDFs inside the
+	sandboxed iframe, so page images are preferred when the pipeline produced them."""
+	pages = _score_pages(audio_path)
+	if pages:
+		st.image([page.read_bytes() for page in pages])
+		return
+	score = audio_path.with_suffix(".pdf")
+	if score.exists():
+		st.iframe(score, height=520)
 
 
 def _done_page(results_path: Path) -> None:

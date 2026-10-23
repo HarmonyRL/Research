@@ -28,8 +28,8 @@ from harmonyrl.render import (
 from harmonyrl.schema import Segment
 
 REPO = Path(__file__).resolve().parent.parent
-_SUPPORTED_FORMATS = frozenset({"midi", "wav", "musicxml", "pdf", "mscz", "mscx"})
-_SCORE_FORMATS = frozenset({"musicxml", "pdf", "mscz", "mscx"})
+_SUPPORTED_FORMATS = frozenset({"midi", "wav", "musicxml", "pdf", "png", "mscz", "mscx"})
+_SCORE_FORMATS = frozenset({"musicxml", "pdf", "png", "mscz", "mscx"})
 
 
 def main() -> None:
@@ -133,6 +133,8 @@ def _render_segment(
 	targets: list[Path] = []
 	if "pdf" in format_set:
 		targets.append(base.with_suffix(".pdf"))
+	if "png" in format_set:
+		targets.append(base.with_suffix(".png"))
 	if "mscz" in format_set:
 		targets.append(base.with_suffix(".mscz"))
 	if "mscx" in format_set:

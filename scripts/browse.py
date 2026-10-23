@@ -15,8 +15,9 @@ def main() -> None:
 	parser.add_argument("--root", default="runs", type=Path)
 	parser.add_argument("--port", type=int, default=8000)
 	args = parser.parse_args()
-	print(f"serving {args.root.resolve()} on http://127.0.0.1:{args.port}")
+	print(f"serving {args.root.resolve()} on http://127.0.0.1:{args.port} (Ctrl+C to stop)")
 	serve(args.root, args.port)
+	print("stopped")
 
 
 if __name__ == "__main__":

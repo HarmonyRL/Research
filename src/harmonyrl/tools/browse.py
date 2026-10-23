@@ -7,6 +7,7 @@ else. Binds to 127.0.0.1 only: reach it through an SSH tunnel
 """
 
 import html
+import signal
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -35,10 +36,24 @@ audio { height: 2rem; width: 22rem; max-width: 60vw; }
 
 
 def serve(root: Path, port: int) -> None:
-	"""Serve `root` on 127.0.0.1:`port` until interrupted."""
+	"""Serve `root` on 127.0.0.1:`port` until interrupted.
+
+	Ctrl+C and SIGTERM are the normal ways to stop the server: the interrupt is
+	caught, the listening socket is closed, and the process exits with status 0.
+	"""
 	root = root.resolve()
-	handler = _make_handler(root)
-	ThreadingHTTPServer(("127.0.0.1", port), handler).serve_forever()
+	server = ThreadingHTTPServer(("127.0.0.1", port), _make_handler(root))
+	signal.signal(signal.SIGTERM, _terminate)
+	try:
+		server.serve_forever()
+	except KeyboardInterrupt:
+		pass
+	finally:
+		server.server_close()
+
+
+def _terminate(signum: int, frame: object) -> None:
+	raise KeyboardInterrupt
 
 
 def _make_handler(root: Path) -> type[BaseHTTPRequestHandler]:

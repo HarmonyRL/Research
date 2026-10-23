@@ -1,5 +1,6 @@
 """Filtering joined items and converting them into contract Segments."""
 
+from collections import Counter
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from fractions import Fraction
@@ -35,6 +36,8 @@ class PreparationReport:
 	used: int = 0
 	with_modulation: int = 0
 	segments: int = 0
+	used_ids: list[str] = field(default_factory=list)
+	meter_distribution: dict[str, int] = field(default_factory=dict)
 	items_without_keys: list[str] = field(default_factory=list)
 	length_trimmed: list[str] = field(default_factory=list)
 	dropped_no_chord_overlong: list[str] = field(default_factory=list)
@@ -43,7 +46,6 @@ class PreparationReport:
 	overlaps_clipped: int = 0
 	chords_overlapped_away: int = 0
 	chords_lost_quantized: int = 0
-	no_chord_collapsed: int = 0
 	key_starts_snapped: int = 0
 	key_spans_dropped_at_end: int = 0
 
@@ -58,14 +60,22 @@ def prepare_dataset(
 	report.both_present = both_present
 	report.meter_change = meter_change
 	report.used = len(ids)
+	report.used_ids = ids
+
+	meters: Counter[str] = Counter()
 	segments: list[Segment] = []
 	for sid in ids:
 		simple_item = simple[sid]
-		if len(simple_item["annotations"]["keys"]) > 1:
+		annotations = simple_item["annotations"]
+		meter_entry = annotations["meters"][0]
+		meters[f"{meter_entry['beats_per_bar']}/{meter_entry['beat_unit']}"] += 1
+		if len(annotations["keys"]) > 1:
 			report.with_modulation += 1
 		segment = _convert_item(sid, simple_item, raw[sid], report)
 		if segment is not None:
 			segments.append(segment)
+
+	report.meter_distribution = dict(sorted(meters.items(), key=lambda kv: -kv[1]))
 	report.segments = len(segments)
 	return segments, report
 
@@ -153,17 +163,20 @@ def _chord_spans(
 	chords: list[Mapping[str, Any]],
 	scale: Fraction,
 	report: PreparationReport,
-) -> list[tuple[Fraction, Fraction, RawChord | None]]:
-	"""Chord spans in 8th notes, clipped where annotations overlap."""
-	spans = []
-	for chord in chords:
-		onset = (beat_value(chord["beat"]) - 1) * scale
-		end = onset + beat_value(chord["duration"]) * scale
-		spans.append((onset, end, _raw_chord(chord, report)))
+) -> list[tuple[Fraction, Fraction, RawChord]]:
+	"""Non-rest chord spans in 8th notes, clipped where annotations overlap."""
+	spans: list[tuple[Fraction, Fraction, RawChord]] = []
+	for entry in chords:
+		chord = _raw_chord(entry, report)
+		if chord is None:
+			continue
+		onset = (beat_value(entry["beat"]) - 1) * scale
+		end = onset + beat_value(entry["duration"]) * scale
+		spans.append((onset, end, chord))
 	spans.sort(key=lambda span: span[0])
-	clipped: list[tuple[Fraction, Fraction, RawChord | None]] = []
-	for i, span in enumerate(spans):
-		onset, end, chord = span
+
+	clipped: list[tuple[Fraction, Fraction, RawChord]] = []
+	for i, (onset, end, chord) in enumerate(spans):
 		if i + 1 < len(spans) and end > spans[i + 1][0]:
 			report.overlaps_clipped += 1
 			end = spans[i + 1][0]
@@ -175,7 +188,7 @@ def _chord_spans(
 
 
 def _events(
-	spans: list[tuple[Fraction, Fraction, RawChord | None]],
+	spans: list[tuple[Fraction, Fraction, RawChord]],
 	length: int,
 	report: PreparationReport,
 ) -> list[ChordEvent] | None:
@@ -184,12 +197,10 @@ def _events(
 	events: list[tuple[RawChord | None, int]] = []
 	cursor = 0
 	for onset, end, chord in spans:
-		start_i, end_i = _snap(onset), _snap(end)
-		if end_i <= start_i:
-			if chord is None:
-				report.no_chord_collapsed += 1
-			else:
-				report.chords_lost_quantized += 1
+		start_i = _snap(onset)
+		end_i = min(_snap(end), length)
+		if start_i >= length or end_i <= start_i:
+			report.chords_lost_quantized += 1
 			continue
 		if start_i > cursor:
 			events.append((None, start_i - cursor))
@@ -198,16 +209,9 @@ def _events(
 	if length > cursor:
 		events.append((None, length - cursor))
 
-	merged: list[tuple[RawChord | None, int]] = []
-	for chord, duration in events:
-		if merged and merged[-1][0] is None and chord is None:
-			merged[-1] = (None, merged[-1][1] + duration)
-		else:
-			merged.append((chord, duration))
-
-	if any(chord is None and duration > MAX_DURATION for chord, duration in merged):
+	if any(chord is None and duration > MAX_DURATION for chord, duration in events):
 		return None
-	return [ChordEvent(chord, duration) for chord, duration in merged]
+	return [ChordEvent(chord, duration) for chord, duration in events]
 
 
 def _key_spans(

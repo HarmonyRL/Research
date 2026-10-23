@@ -7,7 +7,6 @@ one JSONL file per split plus a meta.json with every count the pipeline produced
 import argparse
 import json
 import subprocess
-from collections import Counter
 from datetime import UTC, datetime
 from fractions import Fraction
 from pathlib import Path
@@ -20,7 +19,6 @@ from harmonyrl.data import (
 	load_json_gz,
 	prepare_dataset,
 	tempos_by_id,
-	usable_ids,
 	write_segments,
 )
 from harmonyrl.schema import Segment, Split, project
@@ -43,8 +41,7 @@ def main() -> None:
 	print(f"loaded {len(simple)} simplified, {len(raw)} raw items")
 
 	segments, report = prepare_dataset(simple, raw)
-	used_ids = usable_ids(simple, raw)[0]
-	align = alignment_report(simple, raw, used_ids)
+	align = alignment_report(simple, raw, report.used_ids)
 
 	by_split: dict[Split, list[Segment]] = {split: [] for split in Split}
 	for segment in segments:
@@ -56,10 +53,6 @@ def main() -> None:
 	(output_dir / "tempos.json").write_text(
 		json.dumps(tempos, indent=2, sort_keys=True) + "\n", encoding="utf-8"
 	)
-
-	def meter_of(sid: str) -> str:
-		entry = simple[sid]["annotations"]["meters"][0]
-		return f"{entry['beats_per_bar']}/{entry['beat_unit']}"
 
 	meta = {
 		"git": _git_hash(),
@@ -73,9 +66,7 @@ def main() -> None:
 			"with_modulation": report.with_modulation,
 			"dropped_unrepresentable": len(report.dropped_no_chord_overlong)
 			+ len(report.items_without_keys),
-			"meter_distribution": dict(
-				sorted(Counter(map(meter_of, used_ids)).items(), key=lambda kv: -kv[1])
-			),
+			"meter_distribution": report.meter_distribution,
 		},
 		"segments": {split.value: len(group) for split, group in by_split.items()}
 		| {"total": len(segments)},
@@ -93,7 +84,6 @@ def main() -> None:
 			"overlaps_clipped": report.overlaps_clipped,
 			"chords_overlapped_away": report.chords_overlapped_away,
 			"chords_lost_quantized": report.chords_lost_quantized,
-			"no_chord_collapsed": report.no_chord_collapsed,
 			"key_starts_snapped": report.key_starts_snapped,
 			"key_spans_dropped_at_end": report.key_spans_dropped_at_end,
 		},

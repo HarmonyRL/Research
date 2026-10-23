@@ -1,20 +1,20 @@
 """Score format conversion with the MuseScore CLI."""
 
 import subprocess
-from collections.abc import Mapping
+from collections.abc import Iterable
 from pathlib import Path
 
 
-def musicxml_to_formats(musicxml: Path, targets: Mapping[str, Path], mscore: Path) -> None:
-	"""Convert one MusicXML file into several formats, one MuseScore invocation each.
+def musicxml_to_formats(musicxml: Path, targets: Iterable[Path], mscore: Path) -> None:
+	"""Convert one MusicXML file into each target path, one MuseScore invocation each.
 
-	`targets` maps a MuseScore output extension (pdf, mscz, mscx, png, ...) to its
-	destination path. Formats that drop side files next to the output (mscx) must be
-	given their own directory by the caller. MuseScore only honors the last `-o` per
-	invocation and exits 0 even when it writes nothing, so each target is a separate
-	call whose output is verified to exist.
+	The output format is determined by each target's suffix (.pdf, .mscz, .mscx, ...).
+	Formats that drop side files next to the output (mscx) must be given their own
+	directory by the caller. MuseScore only honors the last `-o` per invocation and
+	exits 0 even when it writes nothing, so each target is a separate call whose
+	output is verified to exist.
 	"""
-	for target in targets.values():
+	for target in targets:
 		subprocess.run(
 			[str(mscore), "-o", str(target), str(musicxml)],
 			check=True,

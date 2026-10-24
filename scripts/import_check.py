@@ -10,14 +10,17 @@ plus mode estimation.
 import argparse
 import random
 from collections import Counter
+from fractions import Fraction
+from math import ceil
 from pathlib import Path
 
 from harmonyrl.data import read_segments
-from harmonyrl.ingest import melody_from_midi, melody_from_musicxml
-from harmonyrl.render import melody_to_score, write_midi, write_score
+from harmonyrl.ingest import melody_from_midi, melody_from_mscore, melody_from_musicxml
+from harmonyrl.render import melody_to_score, musicxml_to_formats, write_midi, write_score
 from harmonyrl.schema import Melody, Mode
 
 WORKDIR = Path("runs/import-check")
+MSCORE = Path.home() / ".local/bin/mscore"
 
 
 def main() -> None:
@@ -38,17 +41,25 @@ def main() -> None:
 	picked = random.Random(args.seed).sample(segments, args.sample)
 	WORKDIR.mkdir(parents=True, exist_ok=True)
 
-	results = {"midi": Counter(), "musicxml": Counter()}
+	results: dict[str, Counter] = {k: Counter() for k in ("midi", "musicxml", "mscz", "mscx")}
 	failures: list[str] = []
 	mode_misses = Counter()
 	for segment in picked:
 		base = WORKDIR / segment.id
 		write_midi(segment.melody, segment.events, base.with_suffix(".mid"), 120)
 		write_score(melody_to_score(segment.melody, segment.events), base.with_suffix(".musicxml"))
+		musicxml_to_formats(base.with_suffix(".musicxml"), [base.with_suffix(".mscz")], MSCORE)
+		mscx_dir = WORKDIR / f"{segment.id}.mscx.d"
+		mscx_dir.mkdir(exist_ok=True)
+		musicxml_to_formats(
+			base.with_suffix(".musicxml"), [mscx_dir / f"{segment.id}.mscx"], MSCORE
+		)
 
 		for kind, imported in (
 			("midi", melody_from_midi(base.with_suffix(".mid"))),
 			("musicxml", melody_from_musicxml(base.with_suffix(".musicxml"))),
+			("mscz", melody_from_mscore(base.with_suffix(".mscz"))),
+			("mscx", melody_from_mscore(mscx_dir / f"{segment.id}.mscx")),
 		):
 			issues, mode_ok = _compare(segment.melody, imported.melody)
 			results[kind]["fail" if issues else "ok"] += 1
@@ -61,7 +72,8 @@ def main() -> None:
 		print(f"{kind}: ok {counter['ok']}/{counter['ok'] + counter['fail']}")
 	print(
 		f"key mode estimated wrong (parallel-key): midi {mode_misses['midi']}, "
-		f"musicxml {mode_misses['musicxml']} — melody notes alone cannot always "
+		f"musicxml {mode_misses['musicxml']}, mscz {mode_misses['mscz']}, "
+		f"mscx {mode_misses['mscx']} — melody notes alone cannot always "
 		f"decide major vs relative minor"
 	)
 	for line in failures[:20]:
@@ -77,8 +89,8 @@ def _compare(original: Melody, imported: Melody) -> tuple[list[str], bool]:
 	# The importer recovers length as the end of the last note's bar, so the
 	# expected value is the original normalized to the same rule.
 	bar = original.meter.bar_eighths
-	end = max(note.offset for note in original.notes) if original.notes else 0
-	expected_length = max(1, (end + bar - 1) // bar * bar)
+	end = max((note.offset for note in original.notes), default=Fraction(0))
+	expected_length = max(1, ceil(end / bar) * bar)
 	if imported.length != expected_length:
 		issues.append(f"length {imported.length} != {expected_length}")
 	expected_key = original.keys[0].key

@@ -2,11 +2,15 @@
 
 from dataclasses import dataclass
 from fractions import Fraction
+from math import ceil
 
 from harmonyrl.schema import Key, KeySpan, Melody, Meter, Mode, Note
 
 SNAP = Fraction(1, 48)
 """Quantization grid in 8th notes: 1/6 of a 16th, so triplets and quintuplets are exact."""
+
+DEFAULT_TEMPO = 120
+"""Beat tempo assumed when an input file carries none."""
 
 
 @dataclass(frozen=True)
@@ -15,13 +19,49 @@ class ImportedMelody:
 	the file declared (None when absent)."""
 
 	melody: Melody
-	tempo: int = 120
+	tempo: int = DEFAULT_TEMPO
 	declared_key: Key | None = None
 
 
 def snap(value: Fraction) -> Fraction:
 	"""Round a position to the quantization grid."""
 	return Fraction(round(value / SNAP), 48)
+
+
+def bar_ceiling(end: Fraction, bar_eighths: int) -> int:
+	"""Length in 8th notes covering `end` up to the end of its bar."""
+	if end <= 0:
+		return 0
+	return ceil(end / bar_eighths) * bar_eighths
+
+
+def meter_from_ratio(numerator: int, denominator: int) -> Meter:
+	"""Convert a written time signature into a contract `Meter` with the same bar length.
+
+	The contract only represents `x/4` and `x/8`, so meters like `2/2` or `6/16` are
+	rescaled to preserve exact bar length in 8th notes; odd `x/16` bars have half-eighth
+	lengths and cannot be represented.
+	"""
+	if denominator in (1, 2, 4):
+		return Meter(numerator * (4 // denominator), 4)
+	if denominator == 8:
+		return Meter(numerator, 8)
+	if denominator == 16 and numerator % 2 == 0:
+		return Meter(numerator // 2, 8)
+	raise ValueError(f"unsupported time signature {numerator}/{denominator}; pass meter=")
+
+
+def beat_tempo_from_quarter(quarter_bpm: float, meter: Meter) -> int:
+	"""Convert quarter-note BPM into the contract's beat tempo (dotted quarter for x/8)."""
+	bpm = quarter_bpm * 2 / 3 if meter.beat_unit == 8 else quarter_bpm
+	return max(1, round(bpm))
+
+
+def eighth_seconds(tempo: int, meter: Meter) -> Fraction:
+	"""Duration of one 8th note in seconds for `tempo` (dotted-quarter BPM on x/8)."""
+	if tempo < 1:
+		raise ValueError(f"tempo must be positive, got {tempo}")
+	return Fraction(20, tempo) if meter.beat_unit == 8 else Fraction(30, tempo)
 
 
 def build_melody(
@@ -32,12 +72,10 @@ def build_melody(
 ) -> Melody:
 	"""Assemble a contract Melody, dropping rests and merging overlaps.
 
-	Notes must arrive sorted by onset; each overlap keeps the higher pitch, matching
-	the monophonic melody the contract requires."""
+	Each overlap keeps the higher pitch, matching the monophonic melody the
+	contract requires."""
 	cleaned: list[Note] = []
 	for note in sorted(notes, key=lambda n: (n.onset, -n.pitch)):
-		if note.duration <= 0:
-			continue
 		if cleaned and note.onset < cleaned[-1].offset:
 			if note.pitch <= cleaned[-1].pitch:
 				continue

@@ -9,7 +9,9 @@ authors = [{ name = "CloudHolic", email = "cloudholic@pm.me" }]
 requires-python = ">=3.14"
 dependencies = [
 	"gymnasium>=1.4.0",
+	"homr>=0.7.0",
 	"huggingface-hub>=2.2.0",
+	"librosa>=1.0.0",
 	"music21>=10.5.0",
 	"numpy>=2.5.4",
 	"pretty-midi>=0.2.11.post0",

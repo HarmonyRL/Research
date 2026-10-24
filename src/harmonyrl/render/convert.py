@@ -1,5 +1,6 @@
 """Score format conversion with the MuseScore CLI."""
 
+import re
 import subprocess
 from collections.abc import Iterable
 from pathlib import Path
@@ -33,4 +34,8 @@ def musicxml_to_formats(musicxml: Path, targets: Iterable[Path], mscore: Path) -
 def _produced(target: Path) -> bool:
 	if target.exists():
 		return True
-	return bool(list(target.parent.glob(f"{target.stem}-*{target.suffix}")))
+	pattern = re.compile(rf"^{re.escape(target.stem)}-\d+{re.escape(target.suffix)}$")
+	return any(
+		pattern.match(candidate.name)
+		for candidate in target.parent.glob(f"{target.stem}-*{target.suffix}")
+	)

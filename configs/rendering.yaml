@@ -6,3 +6,4 @@ output_root: runs/render
 sample_rate: 44100
 gain: 0.5
 default_tempo: 120
+mp3_bitrate: 192k

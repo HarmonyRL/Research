@@ -8,6 +8,7 @@ session can be resumed at any time.
 
 import csv
 import random
+import re
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -96,7 +97,7 @@ def _show_scores(left: Path, right: Path) -> None:
 	"""Show both scores full-width in tabs: half-column images are too small to read.
 
 	Each side falls back to its PDF in an iframe when page images were not rendered."""
-	if not (_score_pages(left) or _score_pages(right)):
+	if not (_has_score(left) or _has_score(right)):
 		return
 	left_tab, right_tab = st.tabs(["왼쪽 악보", "오른쪽 악보"])
 	with left_tab:
@@ -105,9 +106,19 @@ def _show_scores(left: Path, right: Path) -> None:
 		_show_score(right)
 
 
+def _has_score(audio_path: Path) -> bool:
+	return bool(_score_pages(audio_path)) or audio_path.with_suffix(".pdf").is_file()
+
+
 def _score_pages(audio_path: Path) -> list[Path]:
-	"""Page images the rendering pipeline wrote next to the audio, if any."""
-	return sorted(audio_path.parent.glob(f"{audio_path.stem}-*.png"))
+	"""Page images the rendering pipeline wrote next to the audio, in numeric page order."""
+	pattern = re.compile(rf"^{re.escape(audio_path.stem)}-(\d+)\.png$")
+	numbered: list[tuple[int, Path]] = []
+	for candidate in audio_path.parent.glob(f"{audio_path.stem}-*.png"):
+		match = pattern.match(candidate.name)
+		if match is not None:
+			numbered.append((int(match.group(1)), candidate))
+	return [path for _, path in sorted(numbered)]
 
 
 def _show_score(audio_path: Path) -> None:

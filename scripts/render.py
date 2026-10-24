@@ -22,13 +22,14 @@ from harmonyrl.render import (
 	melody_to_score,
 	midi_to_wav,
 	musicxml_to_formats,
+	wav_to_mp3,
 	write_midi,
 	write_score,
 )
 from harmonyrl.schema import Segment
 
 REPO = Path(__file__).resolve().parent.parent
-_SUPPORTED_FORMATS = frozenset({"midi", "wav", "musicxml", "pdf", "png", "mscz", "mscx"})
+_SUPPORTED_FORMATS = frozenset({"midi", "wav", "mp3", "musicxml", "pdf", "png", "mscz", "mscx"})
 _SCORE_FORMATS = frozenset({"musicxml", "pdf", "png", "mscz", "mscx"})
 
 
@@ -115,15 +116,19 @@ def _render_segment(
 ) -> None:
 	format_set = set(formats)
 	base = output / segment.id
-	if "midi" in format_set or "wav" in format_set:
+	if "midi" in format_set or "wav" in format_set or "mp3" in format_set:
 		write_midi(segment.melody, segment.events, base.with_suffix(".mid"), tempo)
-	if "wav" in format_set:
+	if "wav" in format_set or "mp3" in format_set:
 		midi_to_wav(
 			base.with_suffix(".mid"),
 			base.with_suffix(".wav"),
 			Path(config["soundfont"]).expanduser(),
 			sample_rate=config["sample_rate"],
 			gain=config["gain"],
+		)
+	if "mp3" in format_set:
+		wav_to_mp3(
+			base.with_suffix(".wav"), base.with_suffix(".mp3"), bitrate=config["mp3_bitrate"]
 		)
 	if not (format_set & _SCORE_FORMATS):
 		return

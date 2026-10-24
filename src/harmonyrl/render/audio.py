@@ -1,4 +1,4 @@
-"""Audio rendering of MIDI files with FluidSynth."""
+"""Audio rendering of MIDI files with FluidSynth, and MP3 encoding with ffmpeg."""
 
 import subprocess
 from pathlib import Path
@@ -25,6 +25,28 @@ def midi_to_wav(
 			str(gain),
 			str(soundfont),
 			str(midi_path),
+		],
+		check=True,
+		capture_output=True,
+	)
+
+
+def wav_to_mp3(wav_path: Path, mp3_path: Path, *, bitrate: str = "192k") -> None:
+	"""Encode one WAV file to MP3 with libmp3lame."""
+	subprocess.run(
+		[
+			"ffmpeg",
+			"-hide_banner",
+			"-loglevel",
+			"error",
+			"-y",
+			"-i",
+			str(wav_path),
+			"-codec:a",
+			"libmp3lame",
+			"-b:a",
+			bitrate,
+			str(mp3_path),
 		],
 		check=True,
 		capture_output=True,

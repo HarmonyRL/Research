@@ -1,0 +1,8 @@
+# Evaluation of each system on 1 split. `systems` maps a name to what the system needs to load.
+data_dir: data/processed
+run_dir: runs/eval
+split: test
+systems:
+    human: {}
+    hmm:
+        model: runs/hmm/base/model

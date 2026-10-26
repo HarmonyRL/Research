@@ -12,6 +12,7 @@ Writes a stats.json with the configuration and git hash, and prints a summary.
 import argparse
 import json
 import subprocess
+from collections import Counter
 from datetime import UTC, datetime
 from fractions import Fraction
 from pathlib import Path
@@ -20,7 +21,8 @@ from typing import Any
 import yaml
 
 from harmonyrl.data import beat_value, load_json_gz, read_segments
-from harmonyrl.schema import ChordEvent, Melody, Note, RawChord, Segment, chord_pitch_classes
+from harmonyrl.metrics import idiom_counts
+from harmonyrl.schema import Segment
 
 REPO = Path(__file__).resolve().parent.parent
 GRIDS = {"half_bar": Fraction(2), "beat": Fraction(1), "eighth": Fraction(1, 2)}
@@ -66,90 +68,20 @@ def main() -> None:
 
 
 def _segment_stats(segments: list[Segment]) -> dict[str, Any]:
-	chord_total = chord_kind = borrowed = applied = 0
-	notes_total = notes_over_chord = non_chord = 0
-	long_non_chord = resolved = segments_with_long = 0
+	counts = Counter[str]()
 	for segment in segments:
-		melody = segment.melody
-		for event in segment.events:
-			chord = event.chord
-			if chord is None:
-				continue
-			chord_total += 1
-			chord_kind += _has_tension(chord)
-			borrowed += chord.borrowed is not None
-			applied += chord.applied != 0
-		sounding = _chords_at_onsets(melody, segment.events)
-		has_long = False
-		for index, (note, chord) in enumerate(zip(melody.notes, sounding, strict=True)):
-			notes_total += 1
-			if chord is None:
-				continue
-			notes_over_chord += 1
-			if note.pitch % 12 in chord_pitch_classes(chord, melody.key_at(note.onset))[1]:
-				continue
-			non_chord += 1
-			if _is_long_on_strong_beat(note, melody):
-				long_non_chord += 1
-				has_long = True
-				if _resolves_stepwise(melody, sounding, index):
-					resolved += 1
-		segments_with_long += has_long
+		counts += idiom_counts(segment.melody, segment.events, projected=False)
 	return {
 		"segments": len(segments),
-		"notes": notes_total,
-		"non_chord_tone_pct": _round(non_chord, notes_over_chord),
-		"long_non_chord_note_pct": _round(long_non_chord, notes_total),
-		"long_non_chord_segment_pct": _round(segments_with_long, len(segments)),
-		"resolution_pct": _round(resolved, long_non_chord),
-		"chord_kind_pct": _round(chord_kind, chord_total),
-		"borrowed_pct": _round(borrowed, chord_total),
-		"applied_pct": _round(applied, chord_total),
+		"notes": counts["notes"],
+		"non_chord_tone_pct": _round(counts["non_chord_tones"], counts["notes_under_chord"]),
+		"long_non_chord_note_pct": _round(counts["long_non_chord_tones"], counts["notes"]),
+		"long_non_chord_segment_pct": _round(counts["segments_with_long"], len(segments)),
+		"resolution_pct": _round(counts["resolved"], counts["long_non_chord_tones"]),
+		"chord_kind_pct": _round(counts["tension_chords"], counts["chords"]),
+		"borrowed_pct": _round(counts["borrowed_chords"], counts["chords"]),
+		"applied_pct": _round(counts["applied_chords"], counts["chords"]),
 	}
-
-
-def _has_tension(chord: RawChord) -> bool:
-	return (
-		chord.type in (9, 11, 13)
-		or bool(chord.suspensions)
-		or bool(chord.adds)
-		or bool(chord.alterations)
-	)
-
-
-def _chords_at_onsets(melody: Melody, events: tuple[ChordEvent, ...]) -> list[RawChord | None]:
-	"""Chord sounding at each melody note onset, scanned in a single pass."""
-	result: list[RawChord | None] = []
-	cursor = 0
-	start = 0
-	for note in melody.notes:
-		while cursor < len(events) and start + events[cursor].duration <= note.onset:
-			start += events[cursor].duration
-			cursor += 1
-		chord = events[cursor].chord if cursor < len(events) and start <= note.onset else None
-		result.append(chord)
-	return result
-
-
-def _is_long_on_strong_beat(note: Note, melody: Melody) -> bool:
-	if note.onset.denominator != 1:
-		return False
-	strength = melody.meter.beat_strength(int(note.onset))
-	return strength >= 2 and note.duration >= melody.meter.eighths_per_beat
-
-
-def _resolves_stepwise(melody: Melody, sounding: list[RawChord | None], index: int) -> bool:
-	"""Whether the note after a long non-chord tone moves stepwise into a chord tone."""
-	if index + 1 >= len(melody.notes):
-		return False
-	current, following = melody.notes[index], melody.notes[index + 1]
-	if abs(following.pitch - current.pitch) > 2:
-		return False
-	chord = sounding[index + 1]
-	return (
-		chord is not None
-		and following.pitch % 12 in chord_pitch_classes(chord, melody.key_at(following.onset))[1]
-	)
 
 
 def _barline_crossing(segments: list[Segment]) -> tuple[int, int]:

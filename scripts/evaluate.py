@@ -1,11 +1,12 @@
 """Evaluate the harmonizations of 1 system on a data split against the human accompaniments.
 
-Writes the config, git state, the metrics, and the harmonizations as segments (for rendering) into
-a new directory named after the system.
+Writes the config, git state, the metrics, and the harmonizations as segments into a new directory
+named after the system, with the source tempos beside them so that renderings keep tempo.
 """
 
 import argparse
 import json
+import shutil
 import subprocess
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
@@ -56,6 +57,10 @@ def main() -> None:
 		],
 		run_dir / "harmonizations.jsonl",
 	)
+
+	tempos = data_dir / "tempos.json"
+	if tempos.exists():
+		shutil.copy(tempos, run_dir / "tempos.json")
 
 	metrics = evaluate_corpus(segments, harmonizations, train)
 	meta["finished"] = datetime.now(UTC).isoformat(timespec="seconds")

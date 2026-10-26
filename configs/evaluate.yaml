@@ -1,8 +1,21 @@
-# Evaluation of each system on 1 split. `systems` maps a name to what the system needs to load.
+# Evaluation of each system on 1 split. `systems` maps a name to its kind and what it needs to load.
 data_dir: data/processed
 run_dir: runs/eval
 split: test
 systems:
-    human: {}
+    human:
+        kind: human
     hmm:
+        kind: hmm
         model: runs/hmm/base/model
+    pi_ref_greedy:
+        kind: policy
+        model: runs/pretrain/final/best
+        greedy: true
+        batch_size: 64
+    pi_ref_sample:
+        kind: policy
+        model: runs/pretrain/final/best
+        temperature: 1.0
+        seed: 0
+        batch_size: 64

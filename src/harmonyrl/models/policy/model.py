@@ -1,18 +1,20 @@
 """ChordPolicy: a melody encoder and an autoregressive decoder over chord events."""
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Self
 
+import numpy as np
 import torch
 from huggingface_hub import PyTorchModelHubMixin
 from torch import nn
 
-from harmonyrl.schema import HEAD_VALUES, MAX_DURATION
+from harmonyrl.schema import HEAD_VALUES, MAX_DURATION, ChordEvent, Melody, RawChord, allowed
 
 from ..attention import Block
-from ..batch import Batch
+from ..batch import Batch, collate
 from ..features import (
 	BAR_POSITIONS,
 	BEAT_STRENGTHS,
@@ -21,6 +23,8 @@ from ..features import (
 	MODES,
 	OCTAVES,
 	SECTIONS,
+	EventTargets,
+	melody_features,
 )
 
 
@@ -168,33 +172,52 @@ class ChordPolicy(nn.Module, PyTorchModelHubMixin, license="cc-by-nc-sa-3.0"):
 
 		return self.encoder_norm(x)
 
-	def forward(self, batch: Batch) -> PolicyOutput:
-		"""Logits and log π of the target events in `batch`, each event given the ones before."""
-		frames = self.encode(batch)
-		size, events, _ = batch.values.shape
+	def event_states(
+		self,
+		frames: torch.Tensor,
+		frame_mask: torch.Tensor,
+		starts: torch.Tensor,
+		values: torch.Tensor,
+		event_mask: torch.Tensor,
+	) -> torch.Tensor:
+		"""Decoder states (batch, events, dim) of events at `starts`, each seeing the ones before.
+
+		`values` (batch, events, heads) indexes `HEAD_VALUES`, with IGNORE for a head not predicted.
+		The state of an event reads only the values of the events before it.
+		"""
+		size, events, _ = values.shape
 
 		# A head that is not predicted, and every head before the 1st event, gets its own value.
-		values = torch.where(batch.values == IGNORE, self.not_predicted, batch.values)
+		values = torch.where(values == IGNORE, self.not_predicted, values)
 		previous = torch.cat((self.not_predicted.expand(size, 1, -1), values[:, :-1]), dim=1)
-		x = frames.gather(1, batch.starts[..., None].expand(-1, -1, frames.shape[-1]))
+		x = frames.gather(1, starts[..., None].expand(-1, -1, frames.shape[-1]))
 
 		for index, embedding in enumerate(self.previous):
 			x = x + embedding(previous[..., index])
 
-		lengths = batch.frame_mask.sum(dim=1, keepdim=True)
-		x = x + self.remaining((lengths - batch.starts).clamp(max=MAX_DURATION))
+		lengths = frame_mask.sum(dim=1, keepdim=True)
+		x = x + self.remaining((lengths - starts).clamp(max=MAX_DURATION))
 
 		causal = torch.ones(events, events, dtype=torch.bool, device=x.device).tril()
-		self_mask = causal & batch.event_mask[:, None]
-		cross_mask = batch.frame_mask[:, None].expand(size, events, -1)
+		self_mask = causal & event_mask[:, None]
+		cross_mask = frame_mask[:, None].expand(size, events, -1)
 		frame_times = torch.arange(frames.shape[1], device=x.device).expand(size, -1)
 
 		for block in self.decoder:
-			x = block(x, batch.starts, self_mask, frames, frame_times, cross_mask)
-		x = self.decoder_norm(x)
+			x = block(x, starts, self_mask, frames, frame_times, cross_mask)
+
+		return self.decoder_norm(x)
+
+	def forward(self, batch: Batch) -> PolicyOutput:
+		"""Logits and log π of the target events in `batch`, each event given the ones before."""
+		frames = self.encode(batch)
+		x = self.event_states(
+			frames, batch.frame_mask, batch.starts, batch.values, batch.event_mask
+		)
+		values = torch.where(batch.values == IGNORE, self.not_predicted, batch.values)
 
 		logits: dict[str, torch.Tensor] = {}
-		log_prob = torch.zeros(size, events, device=x.device)
+		log_prob = torch.zeros(values.shape[:2], device=x.device)
 
 		for index, (head, output) in enumerate(zip(HEAD_VALUES, self.outputs, strict=True)):
 			logits[head] = output(x).float().masked_fill(~batch.masks[head], float("-inf"))
@@ -206,3 +229,121 @@ class ChordPolicy(nn.Module, PyTorchModelHubMixin, license="cc-by-nc-sa-3.0"):
 				x = x + self.chosen[index](values[..., index])
 
 		return PolicyOutput(logits=logits, log_prob=log_prob)
+
+	def harmonize(
+		self,
+		melody: Melody,
+		*,
+		temperature: float = 1.0,
+		greedy: bool = False,
+		generator: torch.Generator | None = None,
+	) -> tuple[ChordEvent, ...]:
+		"""Chord events for 1 melody, as `generate` chooses them."""
+		events = self.generate(
+			[melody], temperature=temperature, greedy=greedy, generator=generator
+		)
+		return events[0]
+
+	@torch.no_grad()
+	def generate(
+		self,
+		melodies: Sequence[Melody],
+		*,
+		temperature: float = 1.0,
+		greedy: bool = False,
+		generator: torch.Generator | None = None,
+	) -> list[tuple[ChordEvent, ...]]:
+		"""Chord events for each of `melodies`, chosen head by head under the action masks.
+
+		With `greedy`, each head takes its most likely value; otherwise it is sampled
+		from its logits divided by `temperature`, drawing from `generator`.
+		The policy should be run in eval mode.
+		"""
+		if temperature <= 0:
+			raise ValueError(f"temperature must be positive, got {temperature}")
+
+		device = self.not_predicted.device
+		heads = tuple(HEAD_VALUES)
+		batch = collate([(melody_features(melody), _no_events()) for melody in melodies]).to(device)
+		frames = self.encode(batch)
+
+		size = len(melodies)
+		lengths = [melody.length for melody in melodies]
+		positions = [0] * size
+
+		events: list[list[ChordEvent]] = [[] for _ in melodies]
+		starts = torch.zeros(size, 0, dtype=torch.long, device=device)
+		values = torch.zeros(size, 0, len(heads), dtype=torch.long, device=device)
+
+		while active := [b for b in range(size) if positions[b] < lengths[b]]:
+			step = [min(p, n - 1) for p, n in zip(positions, lengths, strict=True)]
+			starts = torch.cat((starts, torch.tensor(step, device=device)[:, None]), dim=1)
+			blank = torch.full((size, 1, len(heads)), IGNORE, dtype=torch.long, device=device)
+			values = torch.cat((values, blank), dim=1)
+			counts = torch.tensor(
+				[len(events[b]) + (b in active) for b in range(size)], device=device
+			)
+			event_mask = torch.arange(values.shape[1], device=device) < counts[:, None]
+			x = self.event_states(frames, batch.frame_mask, starts, values, event_mask)[:, -1]
+
+			chosen: list[dict[str, Any]] = [{} for _ in range(size)]
+			for index, head in enumerate(heads):
+				predicted = [
+					b
+					for b in active
+					if head in ("root", "duration") or chosen[b]["root"] is not None
+				]
+
+				if predicted:
+					masks = [
+						allowed(
+							head,
+							chosen[b],
+							previous_no_chord=bool(events[b]) and events[b][-1].chord is None,
+							remaining=lengths[b] - positions[b],
+						)
+						for b in predicted
+					]
+					allowed_values = torch.tensor(masks, dtype=torch.bool, device=device)
+					logits = self.outputs[index](x[predicted]).float()
+					logits = logits.masked_fill(~allowed_values, float("-inf"))
+					picks = _pick(logits, temperature, greedy, generator)
+
+					for b, value in zip(predicted, picks, strict=True):
+						chosen[b][head] = HEAD_VALUES[head][value]
+						values[b, -1, index] = value
+
+				if index < len(self.chosen):
+					column = values[:, -1, index]
+					x = x + self.chosen[index](
+						torch.where(column == IGNORE, self.not_predicted[index], column)
+					)
+
+			for b in active:
+				prefix = chosen[b]
+				chord = None
+				if prefix["root"] is not None:
+					chord = RawChord(**{head: prefix[head] for head in heads if head != "duration"})
+
+				events[b].append(ChordEvent(chord, prefix["duration"]))
+				positions[b] += prefix["duration"]
+
+		return [tuple(e) for e in events]
+
+
+def _no_events() -> EventTargets:
+	return EventTargets(
+		starts=np.zeros(0, dtype=np.int64),
+		values=np.full((0, len(HEAD_VALUES)), IGNORE, dtype=np.int64),
+		masks={head: np.ones((0, len(v)), dtype=bool) for head, v in HEAD_VALUES.items()},
+	)
+
+
+def _pick(
+	logits: torch.Tensor, temperature: float, greedy: bool, generator: torch.Generator | None
+) -> list[int]:
+	if greedy:
+		return logits.argmax(-1).tolist()
+
+	probabilities = (logits / temperature).softmax(-1)
+	return torch.multinomial(probabilities, 1, generator=generator).squeeze(-1).tolist()

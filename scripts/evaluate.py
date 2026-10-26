@@ -1,6 +1,7 @@
 """Evaluate the harmonizations of 1 system on a data split against the human accompaniments.
 
-Writes the config, git state, and the metrics into a new directory named after the system.
+Writes the config, git state, the metrics, and the harmonizations as segments (for rendering) into
+a new directory named after the system.
 """
 
 import argparse
@@ -8,17 +9,21 @@ import json
 import subprocess
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
+from itertools import batched
 from pathlib import Path
 from typing import Any
 
+import torch
 import yaml
 
-from harmonyrl.data import read_segments
+from harmonyrl.data import read_segments, write_segments
 from harmonyrl.metrics import evaluate_corpus
-from harmonyrl.models import ChordHMM
+from harmonyrl.models import ChordHMM, ChordPolicy
 from harmonyrl.schema import ChordEvent, Segment, Split
 
 REPO = Path(__file__).resolve().parent.parent
+
+type Harmonizer = Callable[[Sequence[Segment]], list[Sequence[ChordEvent]]]
 
 
 def main() -> None:
@@ -43,8 +48,14 @@ def main() -> None:
 	data_dir = Path(config["data_dir"])
 	segments = read_segments(data_dir / f"segments_{Split(config['split']).value}.jsonl")
 	train = read_segments(data_dir / f"segments_{Split.TRAIN.value}.jsonl")
-	harmonize = _system(args.system, config["systems"][args.system])
-	harmonizations = [harmonize(segment) for segment in segments]
+	harmonizations = _system(config["systems"][args.system])(segments)
+	write_segments(
+		[
+			Segment(s.id, s.split, s.melody, tuple(e))
+			for s, e in zip(segments, harmonizations, strict=True)
+		],
+		run_dir / "harmonizations.jsonl",
+	)
 
 	metrics = evaluate_corpus(segments, harmonizations, train)
 	meta["finished"] = datetime.now(UTC).isoformat(timespec="seconds")
@@ -53,14 +64,36 @@ def main() -> None:
 	print(json.dumps(metrics, indent=2))
 
 
-def _system(name: str, settings: dict[str, Any]) -> Callable[[Segment], Sequence[ChordEvent]]:
-	"""How the named system harmonizes a segment, reading only its melody except for `human`."""
-	if name == "human":
-		return lambda segment: segment.events
-	if name == "hmm":
+def _system(settings: dict[str, Any]) -> Harmonizer:
+	"""How a system harmonizes segments, reading only their melodies except for `human`."""
+	kind = settings["kind"]
+	if kind == "human":
+		return lambda segments: [segment.events for segment in segments]
+	if kind == "hmm":
 		hmm = ChordHMM.from_pretrained(settings["model"])
-		return lambda segment: hmm.harmonize(segment.melody)
-	raise ValueError(f"unknown system {name!r}")
+		return lambda segments: [hmm.harmonize(segment.melody) for segment in segments]
+	if kind == "policy":
+		return lambda segments: _generate(segments, settings)
+	raise ValueError(f"unknown system kind {kind!r}")
+
+
+def _generate(segments: Sequence[Segment], settings: dict[str, Any]) -> list[Sequence[ChordEvent]]:
+	"""Policy outputs, generated in batches of melodies of similar length."""
+	device = "cuda" if torch.cuda.is_available() else "cpu"
+	policy = ChordPolicy.from_pretrained(settings["model"]).to(device)
+	generator = torch.Generator(device).manual_seed(settings.get("seed", 0))
+	order = sorted(range(len(segments)), key=lambda i: segments[i].melody.length)
+	results: list[Sequence[ChordEvent]] = [() for _ in segments]
+	for chunk in batched(order, settings["batch_size"], strict=False):
+		outputs = policy.generate(
+			[segments[i].melody for i in chunk],
+			temperature=settings.get("temperature", 1.0),
+			greedy=settings.get("greedy", False),
+			generator=generator,
+		)
+		for i, events in zip(chunk, outputs, strict=True):
+			results[i] = events
+	return results
 
 
 def _write_json(path: Path, data: dict[str, Any]) -> None:

@@ -3,6 +3,7 @@
 import json
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from itertools import batched
 from pathlib import Path
 from typing import Any, Self
 
@@ -252,16 +253,41 @@ class ChordPolicy(nn.Module, PyTorchModelHubMixin, license="cc-by-nc-sa-3.0"):
 		temperature: float = 1.0,
 		greedy: bool = False,
 		generator: torch.Generator | None = None,
+		batch_size: int | None = None,
 	) -> list[tuple[ChordEvent, ...]]:
 		"""Chord events for each of `melodies`, chosen head by head under the action masks.
 
 		With `greedy`, each head takes its most likely value; otherwise it is sampled
 		from its logits divided by `temperature`, drawing from `generator`.
+		With `batch_size`, melodies of similar length are generated that many at a time.
 		The policy should be run in eval mode.
 		"""
 		if temperature <= 0:
 			raise ValueError(f"temperature must be positive, got {temperature}")
 
+		if batch_size is None:
+			return self._generate_batch(melodies, temperature, greedy, generator)
+
+		order = sorted(range(len(melodies)), key=lambda i: melodies[i].length)
+		results: list[tuple[ChordEvent, ...]] = [() for _ in melodies]
+
+		for chunk in batched(order, batch_size, strict=False):
+			outputs = self._generate_batch(
+				[melodies[i] for i in chunk], temperature, greedy, generator
+			)
+
+			for i, events in zip(chunk, outputs, strict=True):
+				results[i] = events
+
+		return results
+
+	def _generate_batch(
+		self,
+		melodies: Sequence[Melody],
+		temperature: float,
+		greedy: bool,
+		generator: torch.Generator | None,
+	) -> list[tuple[ChordEvent, ...]]:
 		device = self.not_predicted.device
 		heads = tuple(HEAD_VALUES)
 		batch = collate([(melody_features(melody), _no_events()) for melody in melodies]).to(device)

@@ -10,7 +10,6 @@ import shutil
 import subprocess
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
-from itertools import batched
 from pathlib import Path
 from typing import Any
 
@@ -83,22 +82,18 @@ def _system(settings: dict[str, Any]) -> Harmonizer:
 
 
 def _generate(segments: Sequence[Segment], settings: dict[str, Any]) -> list[Sequence[ChordEvent]]:
-	"""Policy outputs, generated in batches of melodies of similar length."""
 	device = "cuda" if torch.cuda.is_available() else "cpu"
 	policy = ChordPolicy.from_pretrained(settings["model"]).to(device)
-	generator = torch.Generator(device).manual_seed(settings.get("seed", 0))
-	order = sorted(range(len(segments)), key=lambda i: segments[i].melody.length)
-	results: list[Sequence[ChordEvent]] = [() for _ in segments]
-	for chunk in batched(order, settings["batch_size"], strict=False):
-		outputs = policy.generate(
-			[segments[i].melody for i in chunk],
+
+	return list(
+		policy.generate(
+			[segment.melody for segment in segments],
 			temperature=settings.get("temperature", 1.0),
 			greedy=settings.get("greedy", False),
-			generator=generator,
+			generator=torch.Generator(device).manual_seed(settings.get("seed", 0)),
+			batch_size=settings["batch_size"],
 		)
-		for i, events in zip(chunk, outputs, strict=True):
-			results[i] = events
-	return results
+	)
 
 
 def _write_json(path: Path, data: dict[str, Any]) -> None:

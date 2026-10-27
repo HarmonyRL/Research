@@ -1,0 +1,8 @@
+# Policy samples for every melody of the listed splits, as critic negatives and listening pairs.
+data_dir: data/processed
+run_dir: runs/samples
+model: runs/pretrain/final/best
+temperature: 1.0
+seed: 0
+batch_size: 64
+splits: [train, valid, test]

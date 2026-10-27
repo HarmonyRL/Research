@@ -1,12 +1,11 @@
-"""Training of the structure critic on human accompaniments against negatives."""
+"""Training of the structure critic on human accompaniments against policy samples."""
 
 import json
 import logging
 import math
 import time
-from collections import Counter
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, fields, replace
 from pathlib import Path
 
 import numpy as np
@@ -21,8 +20,6 @@ from ..schedule import warmup_cosine
 from .batch import collate
 from .features import ChordFrames, chord_frames
 from .model import ChordCritic
-from .negatives import negatives
-from .pool import ChordPool
 
 _logger = logging.getLogger(__name__)
 
@@ -56,10 +53,13 @@ class CriticArguments:
 class CriticTrainer:
 	"""Training of a `ChordCritic`, shaped like `transformers.Trainer`.
 
-	Each epoch pairs every training segment with a fresh negative from `negatives`, sampled from
-	`train_samples` and perturbations; the validation negatives are drawn once. `train` writes the
-	metrics of each epoch to `metrics.jsonl` and the critic with the lowest validation loss to
-	`best/` in `args.output_dir`, and ends with those weights loaded.
+	`train_samples` and `valid_samples` hold the policy samples of each segment, the negatives.
+	Each epoch pairs every training segment with 1 of its samples drawn afresh; the validation
+	samples are drawn once. A sample that gives the critic the same input as the human
+	accompaniment is left out, as it would be a positive labeled negative, and a segment left
+	without samples has no negative. `train` writes the metrics of each epoch to `metrics.jsonl`
+	and the critic with the lowest validation loss to `best/` in `args.output_dir`, and ends with
+	those weights loaded.
 	"""
 
 	def __init__(
@@ -68,30 +68,38 @@ class CriticTrainer:
 		args: CriticArguments,
 		train: Sequence[Segment],
 		valid: Sequence[Segment],
-		train_samples: Sequence[Sequence[ChordEvent]],
-		valid_samples: Sequence[Sequence[ChordEvent]],
+		train_samples: Sequence[Sequence[Sequence[ChordEvent]]],
+		valid_samples: Sequence[Sequence[Sequence[ChordEvent]]],
 		device: str | None = None,
 	) -> None:
 		self.critic = critic
 		self.args = args
 		self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
-		self.pool = ChordPool.from_segments(train)
 		self._rng = np.random.default_rng(args.seed)
 
 		self._train = list(train)
-		self._train_samples = list(train_samples)
 		self._train_melodies = [melody_features(s.melody) for s in train]
 		self._train_humans = [chord_frames(s.melody, s.events) for s in train]
-
-		negative, kinds = negatives(valid, valid_samples, self.pool, self._rng)
-		examples = [(melody_features(s.melody), chord_frames(s.melody, s.events)) for s in valid]
-		examples += [
-			(melody, chord_frames(s.melody, events))
-			for (melody, _), s, events in zip(examples, valid, negative, strict=True)
+		self._train_samples = [
+			(index, distinct)
+			for index, (segment, human, samples) in enumerate(
+				zip(self._train, self._train_humans, train_samples, strict=True)
+			)
+			if (distinct := _distinct(segment, human, samples))
 		]
-		labels = [1.0] * len(valid) + [0.0] * len(valid)
 
-		self._valid_kinds = ["human"] * len(valid) + kinds
+		examples = [(melody_features(s.melody), chord_frames(s.melody, s.events)) for s in valid]
+		labels = [1.0] * len(valid)
+
+		for (melody, human), segment, samples in zip(
+			list(examples), valid, valid_samples, strict=True
+		):
+			if distinct := _distinct(segment, human, samples):
+				events = distinct[self._rng.integers(len(distinct))]
+				examples.append((melody, chord_frames(segment.melody, events)))
+				labels.append(0.0)
+
+		self._valid_labels = np.array(labels)
 		self._valid_batches = [
 			(collate([examples[i] for i in indices], [labels[i] for i in indices]), indices)
 			for indices in length_batches(
@@ -107,7 +115,11 @@ class CriticTrainer:
 		torch.manual_seed(args.seed)
 
 		critic = self.critic.to(self.device)
-		lengths = [len(m.onset) for m in self._train_melodies] * 2
+
+		lengths = [len(m.onset) for m in self._train_melodies]
+		lengths += [lengths[index] for index, _ in self._train_samples]
+		labels = [1.0] * len(self._train) + [0.0] * len(self._train_samples)
+
 		optimizer = torch.optim.AdamW(
 			critic.parameters(),
 			lr=args.lr,
@@ -127,8 +139,7 @@ class CriticTrainer:
 
 		for epoch in range(1, args.max_epochs + 1):
 			epoch_start = time.perf_counter()
-			examples, kinds = self._epoch_examples()
-			labels = [1.0] * len(self._train) + [0.0] * len(self._train)
+			examples = self._epoch_examples()
 
 			critic.train()
 
@@ -160,7 +171,6 @@ class CriticTrainer:
 				"epoch": epoch,
 				"lr": scheduler.get_last_lr()[0],
 				"train_loss": loss_sum / len(lengths),
-				"train_kinds": dict(Counter(kinds)),
 				**{f"valid_{k}": v for k, v in valid.items()},
 				"seconds": round(time.perf_counter() - epoch_start, 1),
 			}
@@ -169,11 +179,12 @@ class CriticTrainer:
 				f.write(json.dumps(metrics) + "\n")
 
 			_logger.info(
-				"epoch %d train %.4f valid %.4f accuracy %.3f ece %.3f (%.1fs)",
+				"epoch %d train %.4f valid %.4f accuracy %.3f auc %.3f ece %.3f (%.1fs)",
 				epoch,
 				metrics["train_loss"],
 				valid["loss"],
 				valid["accuracy"],
+				valid["auc"],
 				valid["ece"],
 				metrics["seconds"],
 			)
@@ -191,16 +202,17 @@ class CriticTrainer:
 
 	@torch.no_grad()
 	def evaluate(self) -> dict[str, float]:
-		"""Validation loss without smoothing, accuracy overall and per kind, and calibration error.
+		"""Validation loss without smoothing, accuracy, AUC, and calibration error.
 
+		The AUC is the chance that a human accompaniment scores above a sample, ties counting half.
 		The calibration error is the expected calibration error over 10 equal-width bins of the
 		predicted probability of a human accompaniment.
 		"""
 		critic = self.critic.to(self.device)
 		critic.eval()
 
-		probabilities = np.zeros(len(self._valid_kinds))
-		labels = np.zeros(len(self._valid_kinds))
+		labels = self._valid_labels
+		probabilities = np.zeros(len(labels))
 		loss_sum = 0.0
 
 		for cpu_batch, indices in self._valid_batches:
@@ -214,10 +226,11 @@ class CriticTrainer:
 			).item()
 
 			probabilities[indices] = logits.sigmoid().cpu().numpy()
-			labels[indices] = batch.labels.cpu().numpy()
 
-		correct = (probabilities > 0.5) == (labels > 0.5)
-		kinds = np.array(self._valid_kinds)
+		human = labels > 0.5
+		_, inverse, counts = np.unique(probabilities, return_inverse=True, return_counts=True)
+		ranks = (np.cumsum(counts) - (counts - 1) / 2)[inverse]
+		humans, samples = human.sum(), (~human).sum()
 		bins = np.minimum((probabilities * 10).astype(int), 9)
 		ece = sum(
 			abs(probabilities[bins == b].mean() - labels[bins == b].mean()) * (bins == b).mean()
@@ -227,21 +240,35 @@ class CriticTrainer:
 
 		return {
 			"loss": loss_sum / len(labels),
-			"accuracy": float(correct.mean()),
+			"accuracy": float(((probabilities > 0.5) == human).mean()),
+			"auc": float((ranks[human].sum() - humans * (humans + 1) / 2) / (humans * samples)),
 			"ece": float(ece),
-			**{
-				f"accuracy_{kind}": float(correct[kinds == kind].mean())
-				for kind in sorted(set(kinds))
-			},
 		}
 
-	def _epoch_examples(self) -> tuple[list[Example], list[str]]:
-		"""The training humans followed by 1 fresh negative per segment, and the negative kinds."""
-		negative, kinds = negatives(self._train, self._train_samples, self.pool, self._rng)
+	def _epoch_examples(self) -> list[Example]:
+		"""The training humans followed by 1 fresh sample of each segment that has one."""
 		examples: list[Example] = list(zip(self._train_melodies, self._train_humans, strict=True))
-		examples += [
-			(melody, chord_frames(s.melody, events))
-			for melody, s, events in zip(self._train_melodies, self._train, negative, strict=True)
-		]
 
-		return examples, kinds
+		for index, samples in self._train_samples:
+			events = samples[self._rng.integers(len(samples))]
+			frames = chord_frames(self._train[index].melody, events)
+			examples.append((self._train_melodies[index], frames))
+
+		return examples
+
+
+def _distinct(
+	segment: Segment, human: ChordFrames, samples: Sequence[Sequence[ChordEvent]]
+) -> list[Sequence[ChordEvent]]:
+	"""The samples of `segment` whose frames differ from `human`, the human accompaniment's."""
+	distinct = []
+
+	for events in samples:
+		frames = chord_frames(segment.melody, events)
+		if not all(
+			np.array_equal(getattr(frames, f.name), getattr(human, f.name))
+			for f in fields(ChordFrames)
+		):
+			distinct.append(events)
+
+	return distinct

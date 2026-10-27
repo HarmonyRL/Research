@@ -1,7 +1,16 @@
 # Structure critic. `model` holds CriticConfig fields and `train` CriticArguments fields. `split` is
 # `standard` (train on TRAIN, stop on VALID) or `holdout` (TRAIN and VALID pooled and split again).
+# Each of `samples_dirs` holds 1 policy sample per melody, the negatives.
 data_dir: data/processed
-samples_dir: runs/samples/pi_ref_t1_s0
+samples_dirs:
+    - runs/samples/pi_ref_t1_s0
+    - runs/samples/pi_ref_t1_s1
+    - runs/samples/pi_ref_t1_s2
+    - runs/samples/pi_ref_t1_s3
+    - runs/samples/pi_ref_t1_s4
+    - runs/samples/pi_ref_t1_s5
+    - runs/samples/pi_ref_t1_s6
+    - runs/samples/pi_ref_t1_s7
 run_dir: runs/critic
 seed: 0
 split: standard

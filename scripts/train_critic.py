@@ -1,4 +1,4 @@
-"""Train the structure critic on human accompaniments against policy samples and perturbations.
+"""Train the structure critic on human accompaniments against policy samples.
 
 With `split: holdout`, the training and validation splits are pooled and divided again by a hash of
 the segment ids, for the held-out critic used only in evaluation. Writes the config, git state,
@@ -10,6 +10,7 @@ import hashlib
 import json
 import logging
 import subprocess
+from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -19,7 +20,7 @@ import yaml
 
 from harmonyrl.data import read_segments
 from harmonyrl.models import ChordCritic, CriticArguments, CriticConfig, CriticTrainer
-from harmonyrl.schema import Segment, Split
+from harmonyrl.schema import ChordEvent, Segment, Split
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -44,14 +45,16 @@ def main() -> None:
 	}
 	_write_json(run_dir / "meta.json", meta)
 
-	data_dir, samples_dir = Path(config["data_dir"]), Path(config["samples_dir"])
+	data_dir = Path(config["data_dir"])
 	splits = (Split.TRAIN, Split.VALID)
 	segments = {s: read_segments(data_dir / f"segments_{s.value}.jsonl") for s in splits}
-	samples = {
-		segment.id: segment.events
-		for s in splits
-		for segment in read_segments(samples_dir / f"segments_{s.value}.jsonl")
-	}
+	samples: defaultdict[str, list[tuple[ChordEvent, ...]]] = defaultdict(list)
+
+	for samples_dir in map(Path, config["samples_dirs"]):
+		for s in splits:
+			for segment in read_segments(samples_dir / f"segments_{s.value}.jsonl"):
+				samples[segment.id].append(segment.events)
+
 	train, valid = segments[Split.TRAIN], segments[Split.VALID]
 
 	if config["split"] == "holdout":

@@ -1,4 +1,4 @@
-"""Structure critic: the model, its training, and the negatives it learns from."""
+"""Structure critic: the model and its training."""
 
 from .model import ChordCritic, CriticConfig
 from .train import CriticArguments, CriticTrainer

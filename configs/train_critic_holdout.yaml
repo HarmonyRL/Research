@@ -1,7 +1,15 @@
 # Held-out structure critic, used only in evaluation. Same structure as train_critic.yaml with
 # another seed, on TRAIN and VALID pooled and split again by a hash of the segment ids.
 data_dir: data/processed
-samples_dir: runs/samples/pi_ref_t1_s0
+samples_dirs:
+    - runs/samples/pi_ref_t1_s0
+    - runs/samples/pi_ref_t1_s1
+    - runs/samples/pi_ref_t1_s2
+    - runs/samples/pi_ref_t1_s3
+    - runs/samples/pi_ref_t1_s4
+    - runs/samples/pi_ref_t1_s5
+    - runs/samples/pi_ref_t1_s6
+    - runs/samples/pi_ref_t1_s7
 run_dir: runs/critic
 seed: 1
 split: holdout
@@ -17,7 +25,7 @@ train:
     lr: 3.0e-4
     weight_decay: 0.1
     warmup_steps: 300
-    max_epochs: 20
+    max_epochs: 60
     patience: 4
     grad_clip: 1.0
     label_smoothing: 0.1

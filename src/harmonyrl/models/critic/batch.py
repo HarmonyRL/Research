@@ -13,9 +13,9 @@ from .features import ChordFrames
 
 @dataclass(frozen=True)
 class CriticBatch:
-	"""Padded inputs for several harmonizations and their lables, 1 for a human accompaniment.
+	"""Padded inputs for several harmonizations and their labels, 1 for a human accompaniment.
 
-	Frame tensors are (bathc, frames), with `pitch_classes` and `chord_tones` adding 12 pitch
+	Frame tensors are (batch, frames), with `pitch_classes` and `chord_tones` adding 12 pitch
 	classes and `chord_values` the chord heads. `frame_mask` is True on real frames.
 	"""
 

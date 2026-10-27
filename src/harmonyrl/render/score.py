@@ -51,6 +51,10 @@ def melody_to_score(
 	for event in events:
 		if event.chord is not None:
 			elements.append((position, chord_symbol(event.chord, melody.key_at(position))))
+		else:
+			# A no-chord stretch reads as N.C. on the score; silence would leave the
+			# reader guessing whether chords were omitted.
+			elements.append((position, music21.harmony.NoChord()))
 		position += event.duration
 
 	signatures: dict[Fraction, music21.key.KeySignature] = {}

@@ -80,7 +80,12 @@ class ChordCritic(nn.Module, StrictModelHubMixin, license="cc-by-nc-sa-3.0"):
 			for _ in range(config.layers)
 		)
 		self.norm = nn.LayerNorm(dim)
-		self.output = nn.Sequential(nn.Linear(dim, dim), nn.GELU(), nn.Linear(dim, 1))
+		self.pool = nn.Linear(dim, 1)
+		self.output = nn.Sequential(
+			nn.Linear(dim, dim),
+			nn.GELU(),
+			nn.Linear(dim, 1),
+		)
 
 	def forward(self, batch: CriticBatch) -> torch.Tensor:
 		"""Logits (batch,)."""
@@ -104,8 +109,9 @@ class ChordCritic(nn.Module, StrictModelHubMixin, license="cc-by-nc-sa-3.0"):
 		for block in self.blocks:
 			x = block(x, times, mask)
 
-		weights = batch.frame_mask[..., None].to(x.dtype)
-		pooled = (self.norm(x) * weights).sum(dim=1) / weights.sum(dim=1)
+		x = self.norm(x)
+		weights = self.pool(x).squeeze(-1).masked_fill(~batch.frame_mask, -torch.inf).softmax(dim=1)
+		pooled = (weights[..., None] * x).sum(dim=1)
 
 		return self.output(pooled).squeeze(-1)
 

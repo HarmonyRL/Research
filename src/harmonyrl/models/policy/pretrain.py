@@ -4,7 +4,7 @@ import json
 import logging
 import math
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -15,6 +15,7 @@ from harmonyrl.schema import HEAD_VALUES, Segment
 
 from ..batch import Batch, collate, length_batches
 from ..features import IGNORE, event_targets, melody_features
+from ..schedule import warmup_cosine
 from .model import ChordPolicy
 
 _logger = logging.getLogger(__name__)
@@ -89,7 +90,7 @@ class PolicyTrainer:
 		)
 		steps_per_epoch = len(length_batches(lengths, args.max_frames, self._rng))
 		scheduler = torch.optim.lr_scheduler.LambdaLR(
-			optimizer, _warmup_cosine(args.warmup_steps, steps_per_epoch * args.max_epochs)
+			optimizer, warmup_cosine(args.warmup_steps, steps_per_epoch * args.max_epochs)
 		)
 
 		best_nll = math.inf
@@ -198,15 +199,3 @@ class PolicyTrainer:
 		return {"nll": nll_sum / event_count} | {
 			f"acc_{head}": correct[head] / counts[head] for head in HEAD_VALUES
 		}
-
-
-def _warmup_cosine(warmup: int, total: int) -> Callable[[int], float]:
-	"""Learning rate factor: linear warmup, then cosine decay to 0 at step `total`."""
-
-	def factor(step: int) -> float:
-		if step < warmup:
-			return (step + 1) / warmup
-		progress = min(1.0, (step - warmup) / max(1, total - warmup))
-		return 0.5 * (1 + math.cos(math.pi * progress))
-
-	return factor

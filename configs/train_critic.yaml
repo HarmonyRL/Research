@@ -1,0 +1,24 @@
+# Structure critic. `model` holds CriticConfig fields and `train` CriticArguments fields. `split` is
+# `standard` (train on TRAIN, stop on VALID) or `holdout` (TRAIN and VALID pooled and split again).
+data_dir: data/processed
+samples_dir: runs/samples/pi_ref_t1_s0
+run_dir: runs/critic
+seed: 0
+split: standard
+holdout_fraction: 0.1
+model:
+    dim: 192
+    attention_heads: 4
+    layers: 4
+    ff_mult: 4
+    dropout: 0.1
+train:
+    max_frames: 8192
+    lr: 3.0e-4
+    weight_decay: 0.1
+    warmup_steps: 300
+    max_epochs: 20
+    patience: 4
+    grad_clip: 1.0
+    label_smoothing: 0.1
+    section_dropout: 0.2

@@ -1,15 +1,12 @@
 """ChordPolicy: a melody encoder and an autoregressive decoder over chord events."""
 
-import json
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from itertools import batched
-from pathlib import Path
-from typing import Any, Self
+from typing import Any
 
 import numpy as np
 import torch
-from huggingface_hub import PyTorchModelHubMixin
 from torch import nn
 
 from harmonyrl.schema import HEAD_VALUES, MAX_DURATION, ChordEvent, Melody, RawChord, allowed
@@ -27,10 +24,7 @@ from ..features import (
 	EventTargets,
 	melody_features,
 )
-
-
-def _head_values_json() -> dict[str, list]:
-	return json.loads(json.dumps(HEAD_VALUES))
+from ..hub import StrictModelHubMixin, head_values_json
 
 
 @dataclass(frozen=True)
@@ -47,7 +41,7 @@ class PolicyConfig:
 	decoder_layers: int = 4
 	ff_mult: int = 4
 	dropout: float = 0.3
-	head_values: dict[str, list] = field(default_factory=_head_values_json)
+	head_values: dict[str, list] = field(default_factory=head_values_json)
 
 
 @dataclass(frozen=True)
@@ -61,7 +55,7 @@ class PolicyOutput:
 	log_prob: torch.Tensor
 
 
-class ChordPolicy(nn.Module, PyTorchModelHubMixin, license="cc-by-nc-sa-3.0"):
+class ChordPolicy(nn.Module, StrictModelHubMixin, license="cc-by-nc-sa-3.0"):
 	"""π(chord events | melody), factorized over events and over the heads of each event.
 
 	Heads are predicted in `HEAD_VALUES` order, each conditioned on the heads before it.
@@ -73,7 +67,7 @@ class ChordPolicy(nn.Module, PyTorchModelHubMixin, license="cc-by-nc-sa-3.0"):
 	def __init__(self, config: PolicyConfig) -> None:
 		super().__init__()
 
-		if config.head_values != _head_values_json():
+		if config.head_values != head_values_json():
 			raise ValueError("head_values differ from the HEAD_VALUES of this code")
 
 		self.config = config
@@ -123,37 +117,6 @@ class ChordPolicy(nn.Module, PyTorchModelHubMixin, license="cc-by-nc-sa-3.0"):
 		)
 		self.chosen = nn.ModuleList(
 			nn.Embedding(size + 1, dim) for size in list(sizes.values())[:-1]
-		)
-
-	@classmethod
-	def _from_pretrained(
-		cls,
-		*,
-		model_id: str,
-		revision: str | None,
-		cache_dir: str | Path | None,
-		force_download: bool,
-		local_files_only: bool,
-		token: str | bool | None,
-		map_location: str = "cpu",
-		strict: bool = True,
-		**model_kwargs: Any,
-	) -> Self:
-		"""Load as `PyTorchModelHubMixin` does, but strictly by default.
-
-		The mixin defaults to `strict=False`, which leaves a weight whose name no longer matches
-		the code at its random initial value without an error.
-		"""
-		return super()._from_pretrained(
-			model_id=model_id,
-			revision=revision,
-			cache_dir=cache_dir,
-			force_download=force_download,
-			local_files_only=local_files_only,
-			token=token,
-			map_location=map_location,
-			strict=strict,
-			**model_kwargs,
 		)
 
 	def encode(self, batch: Batch) -> torch.Tensor:

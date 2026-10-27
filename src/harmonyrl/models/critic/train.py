@@ -21,7 +21,7 @@ from ..schedule import warmup_cosine
 from .batch import collate
 from .features import ChordFrames, chord_frames
 from .model import ChordCritic
-from .negative import negatives
+from .negatives import negatives
 from .pool import ChordPool
 
 _logger = logging.getLogger(__name__)

@@ -1,4 +1,4 @@
-"""HuggingFace Hub support shared by the trained models."""
+"""Hugging Face Hub support shared by the trained models."""
 
 import json
 from pathlib import Path

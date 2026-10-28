@@ -36,6 +36,18 @@ _ADD_STEP: dict[int, str] = {
 	11: "add7",
 }
 
+# music21 emits these chord kinds, but the MusicXML kind enumeration has no such
+# values, and readers that do not know them (MuseScore) print the raw kind string
+# instead of a chord symbol. Each maps to a valid kind plus degrees, where "add"
+# alters relative to a dominant reference (an unaltered 7 is the minor seventh)
+# and "alter" relative to the degree already in the kind.
+_KIND_REWRITES: dict[str, tuple[str, tuple[tuple[str, int, int], ...]]] = {
+	"suspended-fourth-seventh": ("suspended-fourth", (("add", 7, 0),)),
+	"augmented-major-seventh": ("major-seventh", (("alter", 5, 1),)),
+	"minor-major-ninth": ("minor-major-seventh", (("add", 9, 0),)),
+	"minor-major-11th": ("minor-major-seventh", (("add", 9, 0), ("add", 11, 0))),
+}
+
 
 def key_sharps(key: Key) -> int:
 	"""Number of sharps (negative for flats) in the key signature of `key`."""
@@ -60,7 +72,21 @@ def chord_symbol(chord: RawChord, key: Key) -> music21.harmony.ChordSymbol:
 	figure = _figure_name(names[root_pc]) + _figure_suffix(intervals)
 	if bass_pc != root_pc:
 		figure += "/" + _figure_name(names[bass_pc])
-	return music21.harmony.ChordSymbol(figure=figure)
+	cs = music21.harmony.ChordSymbol(figure=figure)
+	_rewrite_kind(cs)
+	return cs
+
+
+def _rewrite_kind(cs: music21.harmony.ChordSymbol) -> None:
+	if cs.chordKind not in _KIND_REWRITES:
+		return
+	kind, degrees = _KIND_REWRITES[cs.chordKind]
+	cs.chordKind = kind
+	for mod_type, degree, alter in degrees:
+		cs.addChordStepModification(
+			music21.harmony.ChordStepModification(mod_type, degree, alter),
+			updatePitches=False,
+		)
 
 
 def _spelling_key(chord: RawChord, key: Key) -> Key:

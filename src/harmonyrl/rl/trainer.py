@@ -5,7 +5,9 @@ Each update samples k harmonizations y of each melody in a batch and takes 1 gra
 KL. Both directions start from s = R / β + log π_ref(y) - log π(y), the log ratio of the
 unnormalized target to the policy. The reverse KL weight is β (s - the mean s of the other
 samples of the melody), RLOO: the score function gradient of KL(π || target) with a leave-one-out
-baseline. β stays fixed, since changing it would move the target.
+baseline. The forward KL weight is softmax(s) over the samples of the melody, on-policy DPG: the
+gradient of KL(target || π) by self-normalized importance sampling, which estimates Z per melody
+and so is biased for small k. β stays fixed, since changing it would move the target.
 """
 
 import json
@@ -19,11 +21,13 @@ import numpy as np
 import torch
 
 from harmonyrl.models import ChordCritic, ChordPolicy
-from harmonyrl.schema import Segment
+from harmonyrl.schema import Segment, merge_repeats
 
 from .rollout import Rollout, rollout, rollout_stats
 
 _logger = logging.getLogger(__name__)
+
+_DIVERGENCES = ("reverse", "forward")
 
 
 @dataclass(frozen=True)
@@ -31,14 +35,15 @@ class RLArguments:
 	"""Settings of `RLTrainer`.
 
 	Each of `updates` draws `melodies` training segments, samples `samples` harmonizations of
-	each, and takes 1 gradient step. `clip_reward` is the critic logit bound c. Every
-	`eval_every` updates, `samples` harmonizations of a fixed set of `eval_melodies` validation
-	segments are drawn with a fixed seed and scored, and every `save_every` updates the policy
-	is saved.
+	each, and takes 1 gradient step. `divergence` is the KL direction, "reverse" or "forward".
+	`clip_reward` is the critic logit bound c. Every `eval_every` updates, `samples`
+	harmonizations of a fixed set of `eval_melodies` validation segments are drawn
+	with a fixed seed and scored, and every `save_every` updates the policy is saved.
 	"""
 
 	output_dir: str | Path
 	seed: int = 0
+	divergence: str = "reverse"
 	beta: float = 0.1
 	clip_reward: float = 2.0
 	updates: int = 200
@@ -62,6 +67,15 @@ def reverse_weights(s: torch.Tensor, beta: float) -> torch.Tensor:
 	"""RLOO weights (melodies, samples): β (s - the mean s of the other samples of the melody)."""
 	others = (s.sum(dim=1, keepdim=True) - s) / (s.shape[1] - 1)
 	return beta * (s - others)
+
+
+def forward_weights(s: torch.Tensor) -> torch.Tensor:
+	"""DPG weights (melodies, samples): softmax(s) over the samples of each melody, times k.
+
+	The factor k makes the mean over all samples, like that of the reverse weights, average the
+	per-melody estimates.
+	"""
+	return s.softmax(dim=1) * s.shape[1]
 
 
 def effective_fraction(s: torch.Tensor) -> torch.Tensor:
@@ -93,6 +107,9 @@ class RLTrainer:
 	) -> None:
 		if args.samples < 2:
 			raise ValueError(f"leave-one-out needs 2 samples or more, got {args.samples}")
+
+		if args.divergence not in _DIVERGENCES:
+			raise ValueError(f"divergence must be one of {_DIVERGENCES}, got {args.divergence}")
 
 		self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
 
@@ -191,19 +208,18 @@ class RLTrainer:
 		stats = rollout_stats(samples)
 		stats["objective"] = stats["reward"] - self.args.beta * stats["kl"]
 		stats["effective_fraction"] = effective_fraction(self._log_ratios(samples)).mean().item()
-		stats["unique"] = float(
-			np.mean(
-				[
-					len({s.events for s in samples.samples[i : i + k]}) / k
-					for i in range(0, len(samples.samples), k)
-				]
-			)
-		)
+		stats["unique"] = _unique_fraction(samples.samples, k)
 
 		return {f"{prefix}_{name}": value for name, value in stats.items()}
 
 	def _step(self, samples: Rollout, optimizer: torch.optim.Optimizer) -> dict[str, float]:
-		weights = reverse_weights(self._log_ratios(samples), self.args.beta).flatten()
+		s = self._log_ratios(samples)
+
+		if self.args.divergence == "reverse":
+			weights = reverse_weights(s, self.args.beta).flatten()
+		else:
+			weights = forward_weights(s).flatten()
+
 		log_prob = self.policy(samples.batch).log_prob.sum(dim=1)
 		loss = -(weights * log_prob).mean()
 
@@ -214,3 +230,12 @@ class RLTrainer:
 		optimizer.step()
 
 		return {"loss": loss.item(), "grad_norm": norm.item()}
+
+
+def _unique_fraction(samples: Sequence[Segment], k: int) -> float:
+	"""Mean share of distinct harmonizations in each run of k samples, repeats in bars merged."""
+	groups = [samples[i : i + k] for i in range(0, len(samples), k)]
+
+	return float(
+		np.mean([len({merge_repeats(s.events, s.melody.meter) for s in g}) / k for g in groups])
+	)

@@ -16,6 +16,7 @@ from harmonyrl.schema import (
 	Melody,
 	RawChord,
 	allowed,
+	merge_repeats,
 	no_chord_limit,
 )
 
@@ -219,7 +220,7 @@ class ChordPolicy(nn.Module, StrictModelHubMixin, license="cc-by-nc-sa-3.0"):
 		events = self.generate(
 			[melody], temperature=temperature, greedy=greedy, generator=generator
 		)
-		return events[0]
+		return merge_repeats(events[0], melody.meter)
 
 	@torch.no_grad()
 	def generate(

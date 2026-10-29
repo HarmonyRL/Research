@@ -1,8 +1,10 @@
 """Chords as annotated in Hooktheory, and chord events measured in 8th notes."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from .key import Mode
+from .meter import Meter
 
 MAX_DURATION = 128
 """Longest chord event in 8th notes, the longest chord in the dataset."""
@@ -76,3 +78,26 @@ class ChordEvent:
 	def __post_init__(self) -> None:
 		if not 1 <= self.duration <= MAX_DURATION:
 			raise ValueError(f"duration must be 1-{MAX_DURATION}, got {self.duration}")
+
+
+def merge_repeats(events: Sequence[ChordEvent], meter: Meter) -> tuple[ChordEvent, ...]:
+	"""`events` with each chord repeated inside a bar held instead of struck again."""
+	merged: list[ChordEvent] = []
+	position = 0
+
+	for event in events:
+		last = merged[-1] if merged else None
+		if (
+			last is not None
+			and event.chord is not None
+			and event.chord == last.chord
+			and position % meter.bar_eighths != 0
+			and last.duration + event.duration <= MAX_DURATION
+		):
+			merged[-1] = ChordEvent(event.chord, last.duration + event.duration)
+		else:
+			merged.append(event)
+
+		position += event.duration
+
+	return tuple(merged)

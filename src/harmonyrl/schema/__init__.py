@@ -1,6 +1,6 @@
 """Data contract shared by the data pipeline, file I/O, and models."""
 
-from .chord import MAX_DURATION, ChordEvent, RawChord
+from .chord import MAX_DURATION, ChordEvent, RawChord, merge_repeats
 from .key import Key, KeySpan, Mode, mode_from_intervals
 from .meter import Meter
 from .pitch import chord_pitch_classes
@@ -23,6 +23,7 @@ __all__ = [
 	"Split",
 	"allowed",
 	"chord_pitch_classes",
+	"merge_repeats",
 	"mode_from_intervals",
 	"no_chord_limit",
 	"project",

@@ -23,11 +23,14 @@ import torch
 from harmonyrl.models import ChordCritic, ChordPolicy
 from harmonyrl.schema import Segment, merge_repeats
 
+from .local_reward import local_rewards
+from .reward import terminal_rewards
 from .rollout import Rollout, rollout, rollout_stats
 
 _logger = logging.getLogger(__name__)
 
 _DIVERGENCES = ("reverse", "forward")
+_REWARDS = ("critic", "local")
 
 
 @dataclass(frozen=True)
@@ -36,7 +39,8 @@ class RLArguments:
 
 	Each of `updates` draws `melodies` training segments, samples `samples` harmonizations of
 	each, and takes 1 gradient step. `divergence` is the KL direction, "reverse" or "forward".
-	`clip_reward` is the critic logit bound c. Every `eval_every` updates, `samples`
+	`reward` is "critic", the critic logit clipped to `clip_reward`, or "local", the per-note
+	reward of RL-Chord against the human harmonization. Every `eval_every` updates, `samples`
 	harmonizations of a fixed set of `eval_melodies` validation segments are drawn
 	with a fixed seed and scored, and every `save_every` updates the policy is saved.
 	"""
@@ -44,6 +48,7 @@ class RLArguments:
 	output_dir: str | Path
 	seed: int = 0
 	divergence: str = "reverse"
+	reward: str = "critic"
 	beta: float = 0.1
 	clip_reward: float = 2.0
 	updates: int = 200
@@ -88,18 +93,18 @@ def effective_fraction(s: torch.Tensor) -> torch.Tensor:
 
 
 class RLTrainer:
-	"""Fine-tuning of a policy against the fixed critic, shaped like `transformers.Trainer`.
+	"""Fine-tuning of a policy against a fixed reward, shaped like `transformers.Trainer`.
 
-	`train` writes the metrics of each update to `metrics.jsonl` and the policy to `update-N/`
-	every `save_every` updates and to `final/` in `args.output_dir`. The reference and the critic
-	are never trained.
+	`critic` is needed only for the critic reward. `train` writes the metrics of each update to
+	`metrics.jsonl` and the policy to `update-N/` every `save_every` updates and to `final/` in
+	`args.output_dir`. The reference and the critic are never trained.
 	"""
 
 	def __init__(
 		self,
 		policy: ChordPolicy,
 		reference: ChordPolicy,
-		critic: ChordCritic,
+		critic: ChordCritic | None,
 		args: RLArguments,
 		train: Sequence[Segment],
 		valid: Sequence[Segment],
@@ -111,11 +116,18 @@ class RLTrainer:
 		if args.divergence not in _DIVERGENCES:
 			raise ValueError(f"divergence must be one of {_DIVERGENCES}, got {args.divergence}")
 
+		if args.reward not in _REWARDS:
+			raise ValueError(f"reward must be one of {_REWARDS}, got {args.reward}")
+		if args.reward == "critic" and critic is None:
+			raise ValueError("the critic reward needs a critic")
+		if args.reward == "local" and critic is not None:
+			raise ValueError("the local reward takes no critic")
+
 		self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
 
 		self.policy = policy.to(self.device).eval()
 		self.reference = reference.to(self.device).eval()
-		self.critic = critic.to(self.device).eval()
+		self.critic = critic.to(self.device).eval() if critic is not None else None
 
 		self.args = args
 		self._rng = np.random.default_rng(args.seed)
@@ -186,13 +198,17 @@ class RLTrainer:
 		"""`args.samples` samples of each segment, those of 1 segment next to each other."""
 		repeated = [s for s in segments for _ in range(self.args.samples)]
 
-		return rollout(
-			self.policy,
-			self.reference,
+		return rollout(self.policy, self.reference, self._rewards, repeated, generator=generator)
+
+	def _rewards(self, samples: Sequence[Segment], segments: Sequence[Segment]) -> torch.Tensor:
+		if self.critic is None:
+			return local_rewards(samples, segments)
+
+		return terminal_rewards(
 			self.critic,
-			repeated,
-			clip=self.args.clip_reward,
-			generator=generator,
+			[s.melody for s in samples],
+			[s.events for s in samples],
+			self.args.clip_reward,
 		)
 
 	def _log_ratios(self, samples: Rollout) -> torch.Tensor:

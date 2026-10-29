@@ -1,5 +1,6 @@
-# KL-regularized fine-tuning of π_ref against the structure critic. `train` holds RLArguments
-# fields. `beta` and `clip_reward` are provisional until the experiments.
+# KL-regularized fine-tuning of π_ref against the structure critic or RL-Chord's local reward.
+# `train` holds RLArguments fields. `beta` and `clip_reward` are provisional until the
+# experiments.
 data_dir: data/processed
 reference: runs/pretrain/final/best
 critic: runs/critic/samples8-e60/best
@@ -7,6 +8,7 @@ run_dir: runs/rl
 seed: 0
 train:
     divergence: reverse
+    reward: critic
     beta: 0.1
     clip_reward: 2.0
     updates: 200

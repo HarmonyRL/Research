@@ -1,6 +1,6 @@
 """Rollouts: policy samples for a batch of segments, with the log π that RL learns from."""
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 
 import numpy as np
@@ -8,15 +8,12 @@ import torch
 
 from harmonyrl.models import (
 	Batch,
-	ChordCritic,
 	ChordPolicy,
 	collate,
 	event_targets,
 	melody_features,
 )
 from harmonyrl.schema import ChordEvent, Segment
-
-from .reward import terminal_rewards
 
 
 @dataclass(frozen=True)
@@ -26,7 +23,7 @@ class Rollout:
 	`samples` keep the id, split, and melody of their segments. `batch` holds their targets
 	under the masks they were sampled under. `log_prob` and `reference_log_prob` are log π
 	of each event (segments, events) under the policy and the reference, 0 on padded events,
-	and `rewards` (segments,) are terminal rewards. Tensors are on the policy's device.
+	and `rewards` (segments,) are their rewards. Tensors are on the policy's device.
 	"""
 
 	samples: tuple[Segment, ...]
@@ -52,16 +49,16 @@ def policy_from_reference(reference: ChordPolicy) -> ChordPolicy:
 def rollout(
 	policy: ChordPolicy,
 	reference: ChordPolicy,
-	critic: ChordCritic,
+	reward: Callable[[Sequence[Segment], Sequence[Segment]], torch.Tensor],
 	segments: Sequence[Segment],
 	*,
-	clip: float,
 	generator: torch.Generator | None = None,
 ) -> Rollout:
 	"""Sample each melody of `segments` from `policy` at temperature 1 and score the samples.
 
-	The reference is evaluated under the masks of the policy, so both log π are over the same
-	actions. All 3 models should be in eval mode and on 1 device.
+	`reward` maps the samples and `segments` to 1 reward per sample. The reference is evaluated
+	under the masks of the policy, so both log π are over the same actions. Both policies should
+	be in eval mode and on 1 device.
 	"""
 	if not policy.config.restrict_no_chord:
 		raise ValueError("the policy must restrict no chord")
@@ -81,7 +78,7 @@ def rollout(
 		batch=batch,
 		log_prob=policy(batch).log_prob,
 		reference_log_prob=reference(batch).log_prob,
-		rewards=terminal_rewards(critic, melodies, events, clip).to(device),
+		rewards=reward(samples, segments).to(device),
 	)
 
 

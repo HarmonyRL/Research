@@ -1,4 +1,5 @@
-"""Fine-tune the pretrained policy against the fixed structure critic, with a KL to it.
+"""Fine-tune the pretrained policy against the fixed structure critic or the local reward, with a
+KL to it.
 
 Writes the config, git state, per-update metrics, and policy checkpoints into a new run directory.
 """
@@ -45,12 +46,17 @@ def main() -> None:
 	train = read_segments(data_dir / f"segments_{Split.TRAIN.value}.jsonl")
 	valid = read_segments(data_dir / f"segments_{Split.VALID.value}.jsonl")
 
+	arguments = RLArguments(output_dir=run_dir, seed=config["seed"], **config["train"])
+	critic = None
+	if arguments.reward == "critic":
+		critic = ChordCritic.from_pretrained(config["critic"])
+
 	reference = ChordPolicy.from_pretrained(config["reference"])
 	trainer = RLTrainer(
 		policy_from_reference(reference),
 		reference,
-		ChordCritic.from_pretrained(config["critic"]),
-		RLArguments(output_dir=run_dir, seed=config["seed"], **config["train"]),
+		critic,
+		arguments,
 		train=train,
 		valid=valid,
 	)

@@ -9,7 +9,15 @@ import numpy as np
 import torch
 from torch import nn
 
-from harmonyrl.schema import HEAD_VALUES, MAX_DURATION, ChordEvent, Melody, RawChord, allowed
+from harmonyrl.schema import (
+	HEAD_VALUES,
+	MAX_DURATION,
+	ChordEvent,
+	Melody,
+	RawChord,
+	allowed,
+	no_chord_limit,
+)
 
 from ..attention import Block
 from ..batch import Batch, collate
@@ -33,6 +41,8 @@ class PolicyConfig:
 
 	`head_values` is the vocabulary the output heads index: `HEAD_VALUES` with modes as strings
 	and tuples as lists, so that a checkpoint can be checked against the code that loads it.
+	With `restrict_no_chord`, `generate` chooses no chord only as the 1st event, within the
+	`no_chord_limit` of the melody, and targets for this policy should be built the same way.
 	"""
 
 	dim: int = 384
@@ -41,6 +51,7 @@ class PolicyConfig:
 	decoder_layers: int = 4
 	ff_mult: int = 4
 	dropout: float = 0.3
+	restrict_no_chord: bool = False
 	head_values: dict[str, list] = field(default_factory=head_values_json)
 
 
@@ -122,8 +133,10 @@ class ChordPolicy(nn.Module, StrictModelHubMixin, license="cc-by-nc-sa-3.0"):
 	def encode(self, batch: Batch) -> torch.Tensor:
 		"""Frame states (batch, frames, dim)."""
 		x = self.pitch_classes(batch.pitch_classes)
+
 		for name, embedding in self.frame_embeddings.items():
 			x = x + embedding(getattr(batch, name).long())
+
 		for name, embedding in self.melody_embeddings.items():
 			x = x + embedding(getattr(batch, name))[:, None]
 
@@ -258,6 +271,8 @@ class ChordPolicy(nn.Module, StrictModelHubMixin, license="cc-by-nc-sa-3.0"):
 
 		size = len(melodies)
 		lengths = [melody.length for melody in melodies]
+		limits = [no_chord_limit(melody) for melody in melodies]
+		restrict = self.config.restrict_no_chord
 		positions = [0] * size
 
 		events: list[list[ChordEvent]] = [[] for _ in melodies]
@@ -290,6 +305,7 @@ class ChordPolicy(nn.Module, StrictModelHubMixin, license="cc-by-nc-sa-3.0"):
 							chosen[b],
 							previous_no_chord=bool(events[b]) and events[b][-1].chord is None,
 							remaining=lengths[b] - positions[b],
+							no_chord_room=(0 if events[b] else limits[b]) if restrict else None,
 						)
 						for b in predicted
 					]

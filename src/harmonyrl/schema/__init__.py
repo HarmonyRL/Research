@@ -5,7 +5,7 @@ from .key import Key, KeySpan, Mode, mode_from_intervals
 from .meter import Meter
 from .pitch import chord_pitch_classes
 from .segment import Melody, Note, Section, Segment, Split, section_from_label
-from .vocab import HEAD_VALUES, allowed, project
+from .vocab import HEAD_VALUES, allowed, no_chord_limit, project
 
 __all__ = [
 	"HEAD_VALUES",
@@ -24,6 +24,7 @@ __all__ = [
 	"allowed",
 	"chord_pitch_classes",
 	"mode_from_intervals",
+	"no_chord_limit",
 	"project",
 	"section_from_label",
 ]

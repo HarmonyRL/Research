@@ -5,7 +5,16 @@ from math import ceil, floor
 
 import numpy as np
 
-from harmonyrl.schema import HEAD_VALUES, Melody, Mode, Section, Segment, allowed, project
+from harmonyrl.schema import (
+	HEAD_VALUES,
+	Melody,
+	Mode,
+	Section,
+	Segment,
+	allowed,
+	no_chord_limit,
+	project,
+)
 
 BAR_POSITIONS = 24
 """Distinct bar positions in 8th notes. Later positions in longer bars share the last value."""
@@ -108,10 +117,11 @@ class EventTargets:
 	masks: dict[str, np.ndarray]
 
 
-def event_targets(segment: Segment) -> EventTargets:
+def event_targets(segment: Segment, *, restrict_no_chord: bool = False) -> EventTargets:
 	"""Targets of the projected chords of `segment`.
 
-	Raises ValueError if a target falls outside its mask,
+	With `restrict_no_chord`, no chord is allowed only as the 1st event, within the
+	`no_chord_limit` of the melody. Raises ValueError if a target falls outside its mask,
 	which means the segment breaks the contract.
 	"""
 	heads = tuple(HEAD_VALUES)
@@ -120,10 +130,13 @@ def event_targets(segment: Segment) -> EventTargets:
 	values = np.full((count, len(heads)), IGNORE, dtype=np.int64)
 	masks = {head: np.ones((count, len(v)), dtype=bool) for head, v in HEAD_VALUES.items()}
 
+	limit = no_chord_limit(segment.melody)
 	start = 0
 	previous_no_chord = False
+
 	for i, event in enumerate(segment.events):
 		starts[i] = start
+		no_chord_room = (0 if i else limit) if restrict_no_chord else None
 		target: dict[str, object] = {"root": None}
 
 		if event.chord is not None:
@@ -141,6 +154,7 @@ def event_targets(segment: Segment) -> EventTargets:
 				target,
 				previous_no_chord=previous_no_chord,
 				remaining=segment.melody.length - start,
+				no_chord_room=no_chord_room,
 			)
 			index = _INDEX[head][target[head]]
 			if not mask[index]:

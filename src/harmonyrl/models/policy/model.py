@@ -216,7 +216,7 @@ class ChordPolicy(nn.Module, StrictModelHubMixin, license="cc-by-nc-sa-3.0"):
 		greedy: bool = False,
 		generator: torch.Generator | None = None,
 	) -> tuple[ChordEvent, ...]:
-		"""Chord events for 1 melody, as `generate` chooses them."""
+		"""Chord events for 1 melody, as `generate` chooses them, with repeats inside bars held."""
 		events = self.generate(
 			[melody], temperature=temperature, greedy=greedy, generator=generator
 		)

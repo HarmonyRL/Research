@@ -13,6 +13,7 @@ samples_dirs:
 run_dir: runs/critic
 seed: 1
 split: holdout
+restrict_no_chord: true
 holdout_fraction: 0.1
 model:
     dim: 192

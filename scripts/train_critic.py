@@ -1,8 +1,10 @@
 """Train the structure critic on human accompaniments against policy samples.
 
 With `split: holdout`, the training and validation splits are pooled and divided again by a hash of
-the segment ids, for the held-out critic used only in evaluation. Writes the config, git state,
-per-epoch metrics, and the checkpoint with the lowest validation loss into a new run directory.
+the segment ids, for the held-out critic used only in evaluation. With `restrict_no_chord`, only
+human accompaniments that keep no chord to a pickup are used, as policy samples do. Writes the
+config, git state, per-epoch metrics, and the checkpoint with the lowest validation loss into a new
+run directory.
 """
 
 import argparse
@@ -20,7 +22,7 @@ import yaml
 
 from harmonyrl.data import read_segments
 from harmonyrl.models import ChordCritic, CriticArguments, CriticConfig, CriticTrainer
-from harmonyrl.schema import ChordEvent, Segment, Split
+from harmonyrl.schema import ChordEvent, Segment, Split, no_chord_limit
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -48,6 +50,9 @@ def main() -> None:
 	data_dir = Path(config["data_dir"])
 	splits = (Split.TRAIN, Split.VALID)
 	segments = {s: read_segments(data_dir / f"segments_{s.value}.jsonl") for s in splits}
+	if config["restrict_no_chord"]:
+		segments = {s: [x for x in v if _keeps_no_chord_to_pickup(x)] for s, v in segments.items()}
+
 	samples: defaultdict[str, list[tuple[ChordEvent, ...]]] = defaultdict(list)
 
 	for samples_dir in map(Path, config["samples_dirs"]):
@@ -85,6 +90,14 @@ def main() -> None:
 
 	logging.info(
 		"best epoch %d, valid loss %.4f, in %s", best["epoch"], best["valid_loss"], run_dir / "best"
+	)
+
+
+def _keeps_no_chord_to_pickup(segment: Segment) -> bool:
+	"""Whether no chord sounds only as the 1st event, within the `no_chord_limit` of the melody."""
+	first = segment.events[0]
+	return all(e.chord is not None for e in segment.events[1:]) and (
+		first.chord is not None or first.duration <= no_chord_limit(segment.melody)
 	)
 
 

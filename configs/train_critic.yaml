@@ -1,6 +1,7 @@
 # Structure critic. `model` holds CriticConfig fields and `train` CriticArguments fields. `split` is
 # `standard` (train on TRAIN, stop on VALID) or `holdout` (TRAIN and VALID pooled and split again).
-# Each of `samples_dirs` holds 1 policy sample per melody, the negatives.
+# Each of `samples_dirs` holds 1 policy sample per melody, the negatives. `restrict_no_chord` keeps
+# only human accompaniments with no chord kept to a pickup, as the negatives are.
 data_dir: data/processed
 samples_dirs:
     - runs/samples/pi_ref_t1_s0
@@ -14,6 +15,7 @@ samples_dirs:
 run_dir: runs/critic
 seed: 0
 split: standard
+restrict_no_chord: true
 holdout_fraction: 0.1
 model:
     dim: 192

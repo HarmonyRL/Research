@@ -3,7 +3,7 @@
 # experiments.
 data_dir: data/processed
 reference: runs/pretrain/final/best
-critic: runs/critic/samples8-e60/best
+critic: runs/critic/main/best
 run_dir: runs/rl
 seed: 0
 train:

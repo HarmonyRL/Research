@@ -17,6 +17,7 @@ import yaml
 
 from harmonyrl.data import read_segments, write_segments
 from harmonyrl.models import ChordPolicy
+from harmonyrl.rl import policy_from_reference
 from harmonyrl.schema import Segment, Split
 
 REPO = Path(__file__).resolve().parent.parent
@@ -41,7 +42,12 @@ def main() -> None:
 	}
 
 	device = "cuda" if torch.cuda.is_available() else "cpu"
-	policy = ChordPolicy.from_pretrained(config["model"]).to(device)
+
+	policy = ChordPolicy.from_pretrained(config["model"])
+	if config["restrict_no_chord"]:
+		policy = policy_from_reference(policy).eval()
+	policy = policy.to(device)
+
 	generator = torch.Generator(device).manual_seed(config["seed"])
 	data_dir = Path(config["data_dir"])
 	for split in map(Split, config["splits"]):

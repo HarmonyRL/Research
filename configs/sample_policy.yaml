@@ -1,8 +1,10 @@
-# Policy samples for every melody of the listed splits, as critic negatives and listening pairs.
+# Policy samples for every melody of the listed splits, as critic negatives. `restrict_no_chord`
+# keeps no chord to a pickup, as RL policies do.
 data_dir: data/processed
 run_dir: runs/samples
 model: runs/pretrain/final/best
+restrict_no_chord: true
 temperature: 1.0
 seed: 0
 batch_size: 64
-splits: [train, valid, test]
+splits: [train, valid]

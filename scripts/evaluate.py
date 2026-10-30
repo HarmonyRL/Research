@@ -21,7 +21,7 @@ import yaml
 from harmonyrl.data import read_segments, write_segments
 from harmonyrl.metrics import evaluate_corpus
 from harmonyrl.models import ChordCritic, ChordHMM, ChordPolicy
-from harmonyrl.rl import terminal_rewards
+from harmonyrl.rl import policy_from_reference, terminal_rewards
 from harmonyrl.schema import ChordEvent, Segment, Split
 
 REPO = Path(__file__).resolve().parent.parent
@@ -93,8 +93,11 @@ def _generate(
 ) -> list[list[Sequence[ChordEvent]]]:
 	"""`samples` harmonizations of each segment from the policy, those of 1 segment in a run."""
 	device = _device()
-	policy = ChordPolicy.from_pretrained(settings["model"]).to(device)
-	events = policy.generate(
+	policy = ChordPolicy.from_pretrained(settings["model"])
+	if settings.get("restrict_no_chord", False):
+		policy = policy_from_reference(policy).eval()
+
+	events = policy.to(device).generate(
 		[segment.melody for segment in segments for _ in range(samples)],
 		temperature=settings.get("temperature", 1.0),
 		greedy=settings.get("greedy", False),

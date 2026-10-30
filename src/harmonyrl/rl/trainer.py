@@ -252,6 +252,4 @@ def _unique_fraction(samples: Sequence[Segment], k: int) -> float:
 	"""Mean share of distinct harmonizations in each run of k samples, repeats in bars merged."""
 	groups = [samples[i : i + k] for i in range(0, len(samples), k)]
 
-	return float(
-		np.mean([len({merge_repeats(s.events, s.melody.meter) for s in g}) / k for g in groups])
-	)
+	return float(np.mean([len({merge_repeats(s.events, s.melody) for s in g}) / k for g in groups]))

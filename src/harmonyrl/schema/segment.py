@@ -2,12 +2,13 @@
 
 import re
 from bisect import bisect_right
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from fractions import Fraction
 from itertools import pairwise
 
-from .chord import ChordEvent
+from .chord import MAX_DURATION, ChordEvent
 from .key import Key, KeySpan
 from .meter import Meter
 
@@ -148,3 +149,28 @@ class Segment:
 
 		if any(a.chord is None and b.chord is None for a, b in pairwise(self.events)):
 			raise ValueError("consecutive no-chord events must be merged")
+
+
+def merge_repeats(events: Sequence[ChordEvent], melody: Melody) -> tuple[ChordEvent, ...]:
+	"""`events` of `melody` with each chord repeated inside a bar held instead of struck again."""
+	merged: list[ChordEvent] = []
+	start = position = 0
+
+	for event in events:
+		last = merged[-1] if merged else None
+		if (
+			last is not None
+			and event.chord is not None
+			and event.chord == last.chord
+			and position % melody.meter.bar_eighths != 0
+			and melody.key_at(position) == melody.key_at(start)
+			and last.duration + event.duration <= MAX_DURATION
+		):
+			merged[-1] = ChordEvent(event.chord, last.duration + event.duration)
+		else:
+			merged.append(event)
+			start = position
+
+		position += event.duration
+
+	return tuple(merged)

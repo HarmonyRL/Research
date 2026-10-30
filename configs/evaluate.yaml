@@ -1,7 +1,13 @@
-# Evaluation of each system on 1 split. `systems` maps a name to its kind and what it needs to load.
+# Evaluation of each system on 1 split. `systems` maps a name to its kind and what it needs to load;
+# `samples` is the number of harmonizations per melody. Each critic of `critics` reports its mean
+# logit over all harmonizations. `rerank` picks among `candidates` samples of `model` by the
+# critic reward clipped to `clip_reward`: the best with `beta` 0, else in proportion to
+# exp(reward / beta).
 data_dir: data/processed
 run_dir: runs/eval
 split: test
+critics:
+    critic: runs/critic/samples8-e60/best
 systems:
     human:
         kind: human
@@ -17,5 +23,26 @@ systems:
         kind: policy
         model: runs/pretrain/final/best
         temperature: 1.0
+        samples: 8
+        seed: 0
+        batch_size: 64
+    pi_ref_best_of_8:
+        kind: rerank
+        model: runs/pretrain/final/best
+        critic: runs/critic/samples8-e60/best
+        candidates: 8
+        beta: 0.0
+        clip_reward: 2.0
+        samples: 8
+        seed: 0
+        batch_size: 64
+    pi_ref_sir_beta0.1:
+        kind: rerank
+        model: runs/pretrain/final/best
+        critic: runs/critic/samples8-e60/best
+        candidates: 8
+        beta: 0.1
+        clip_reward: 2.0
+        samples: 8
         seed: 0
         batch_size: 64

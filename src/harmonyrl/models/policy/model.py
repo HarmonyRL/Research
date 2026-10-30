@@ -220,7 +220,7 @@ class ChordPolicy(nn.Module, StrictModelHubMixin, license="cc-by-nc-sa-3.0"):
 		events = self.generate(
 			[melody], temperature=temperature, greedy=greedy, generator=generator
 		)
-		return merge_repeats(events[0], melody.meter)
+		return merge_repeats(events[0], melody)
 
 	@torch.no_grad()
 	def generate(

@@ -1,21 +1,48 @@
 """Fixed voicing of chord events for audio rendering.
 
 Every system is rendered through these rules, so the voicing never varies between
-experiments. The bass sits in the octave starting at C2 and the remaining chord tones
-are packed in ascending order from C3 upward.
+experiments. The bass note sits in C1-E2; C-E basses default to the C2-E2 octave
+and drop to C1-E1 only when that lets the remaining voices sit lower. The other
+chord tones form an open voicing above C3: their order is free, and each chord
+takes the placement with the lowest total pitch that keeps every pair of
+simultaneous voices within the low interval limits.
 """
 
 from collections.abc import Sequence
 from dataclasses import dataclass
 from fractions import Fraction
+from functools import cache
+from itertools import combinations, product
 
 from harmonyrl.schema import ChordEvent, Melody, chord_pitch_classes
 
-BASS_BOTTOM = 36
-"""MIDI note of the bass voice octave (C2)."""
+UPPER_FLOOR = 48
+"""Lowest MIDI note allowed for upper voices (C3), keeping them clear of the bass."""
 
-UPPER_BOTTOM = 48
-"""Lowest MIDI note allowed for upper voices (C3)."""
+_UPPER_CEILING = 83
+"""Highest candidate note for an upper voice (B5); real placements stay far below."""
+
+# Low interval limits (Gary Lindsay's chart): the lowest note each interval may
+# sit on before it turns muddy. Intervals beyond a major 10th are unrestricted,
+# so is the octave. The 9-semitone row takes the stricter of its two spellings
+# (M6 or diminished 7th) since the voicing carries no spelling.
+_LOW_LIMIT = {
+	1: 52,
+	2: 51,
+	3: 48,
+	4: 46,
+	5: 46,
+	6: 46,
+	7: 34,
+	8: 43,
+	9: 42,
+	10: 41,
+	11: 41,
+	13: 40,
+	14: 39,
+	15: 36,
+	16: 34,
+}
 
 MELODY_PROGRAM = 0
 """General MIDI program of the melody voice: Acoustic Grand."""
@@ -71,10 +98,26 @@ def chord_notes(melody: Melody, events: Sequence[ChordEvent]) -> tuple[VoicedNot
 
 
 def _voice_chord(bass_pc: int, pitch_classes: frozenset[int]) -> tuple[int, ...]:
-	pitches = [BASS_BOTTOM + bass_pc]
-	for pc in sorted(pitch_classes - {bass_pc}):
-		pitch = UPPER_BOTTOM + (pc - UPPER_BOTTOM) % 12
-		while pitch <= pitches[-1]:
-			pitch += 12
-		pitches.append(pitch)
-	return tuple(pitches)
+	uppers = tuple(sorted(pitch_classes - {bass_pc}))
+	if bass_pc <= 4:
+		high = _voice(bass_pc + 36, uppers)
+		low = _voice(bass_pc + 24, uppers)
+		return low if sum(low[1:]) < sum(high[1:]) else high
+	return _voice(bass_pc + 24, uppers)
+
+
+@cache
+def _voice(bass: int, uppers: tuple[int, ...]) -> tuple[int, ...]:
+	"""The lowest open voicing of `uppers` above `bass` that respects the limits."""
+	candidates = [range(UPPER_FLOOR + pc, _UPPER_CEILING + 1, 12) for pc in uppers]
+	best: tuple[int, ...] | None = None
+	for combo in product(*candidates):
+		notes = (bass, *combo)
+		if all(
+			hi - lo not in _LOW_LIMIT or lo >= _LOW_LIMIT[hi - lo]
+			for lo, hi in combinations(notes, 2)
+		) and (best is None or (sum(combo), combo) < (sum(best), best)):
+			best = combo
+	if best is None:
+		raise ValueError(f"no voicing within the low interval limits for bass {bass}, {uppers}")
+	return (bass, *best)

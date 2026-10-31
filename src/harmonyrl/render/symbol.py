@@ -23,6 +23,9 @@ _REL_MAJOR_OFFSET: dict[Mode, int] = {
 	Mode.LOCRIAN: 11,
 }
 
+# Added degrees follow the MusicXML convention that an unaltered added 7th is the
+# minor seventh, so step 10 (a flat 7th) is "add7" and step 11 (a major 7th)
+# "add#7" — the reverse of what the suffixes look like they mean.
 _ADD_STEP: dict[int, str] = {
 	1: "addb9",
 	2: "add9",
@@ -32,8 +35,8 @@ _ADD_STEP: dict[int, str] = {
 	6: "add#11",
 	7: "add5",
 	8: "addb13",
-	10: "addb7",
-	11: "add7",
+	10: "add7",
+	11: "add#7",
 }
 
 # music21 emits these chord kinds, but the MusicXML kind enumeration has no such
@@ -139,6 +142,7 @@ def _figure_name(name: str) -> str:
 
 
 def _figure_suffix(intervals: frozenset[int]) -> str:
+	"""Figure suffix for the root-relative interval structure."""
 	has_maj3 = 4 in intervals
 	has_min3 = not has_maj3 and 3 in intervals
 	has_p5 = 7 in intervals
@@ -197,19 +201,27 @@ def _figure_suffix(intervals: frozenset[int]) -> str:
 			else:
 				kind = prefix
 	else:
-		if 5 in intervals:
-			used.add(5)
-			if has_min7:
-				kind = "7sus4"
-				used.add(10)
-			else:
-				kind = "sus4"
-		elif 2 in intervals:
-			used.add(2)
-			kind = "sus2"
-		else:
-			kind = ""
+		suspension = 4 if 5 in intervals else 2 if 2 in intervals else 0
+		if suspension:
+			used.add(5 if suspension == 4 else 2)
+		if has_maj7:
+			used.add(11)
+			kind = "maj7"
 			mods.append("omit3")
+			if suspension:
+				# music21 has no maj7sus4 figure; "maj7omit3add4" parses and
+				# MuseScore resolves it to maj7sus4.
+				mods.append(f"add{suspension}")
+		elif has_min7:
+			used.add(10)
+			# An unaltered added 7th under suspended-second reads as 7sus2.
+			kind = "7sus4" if suspension == 4 else "sus2" if suspension == 2 else "7"
+			if not suspension:
+				mods.append("omit3")
+		else:
+			kind = "sus4" if suspension == 4 else "sus2" if suspension == 2 else ""
+			if not suspension:
+				mods.append("omit3")
 
 		if has_p5:
 			used.add(7)

@@ -1,9 +1,11 @@
-# Decoding settings of π_ref compared on VALID, to choose the reference decoding before RL.
+# Systems compared on VALID before RL: decodings of π_ref, and critic reranking of the chosen one.
 # Same keys as evaluate.yaml.
 data_dir: data/processed
 run_dir: runs/eval-valid
 split: valid
-critics: {}
+critics:
+    critic: runs/critic/main/best
+    holdout: runs/critic/holdout/best
 systems:
     human:
         kind: human
@@ -42,6 +44,18 @@ systems:
         model: runs/pretrain/final/best
         restrict_no_chord: true
         temperature: 1.0
+        samples: 8
+        seed: 0
+        batch_size: 64
+    pi_ref_t0.85_best_of_8:
+        kind: rerank
+        model: runs/pretrain/final/best
+        restrict_no_chord: true
+        temperature: 0.85
+        critic: runs/critic/main/best
+        candidates: 8
+        beta: 0.0
+        clip_reward: 2.0
         samples: 8
         seed: 0
         batch_size: 64

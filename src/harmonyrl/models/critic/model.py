@@ -74,7 +74,7 @@ class ChordCritic(nn.Module, StrictModelHubMixin, license="cc-by-nc-sa-3.0"):
 		"""
 		device = next(self.parameters()).device
 		inputs = [self.token_ids(m, e) for m, e in zip(melodies, harmonizations, strict=True)]
-		order = sorted(range(len(inputs)), key=lambda i: len(inputs[i]))
+		order = sorted(range(len(inputs)), key=lambda i: len(inputs[i]), reverse=True)
 		logits = [0.0] * len(inputs)
 
 		for chunk in batched(order, batch_size, strict=False):

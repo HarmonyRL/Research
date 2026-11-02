@@ -83,12 +83,7 @@ def build_melody(
 		cleaned.append(note)
 
 	return Melody(
-		notes=tuple(cleaned),
-		meter=meter,
-		keys=keys,
-		section=None,
-		tempo=tempo,
-		length=length
+		notes=tuple(cleaned), meter=meter, keys=keys, section=None, tempo=tempo, length=length
 	)
 
 

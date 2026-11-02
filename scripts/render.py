@@ -52,7 +52,7 @@ def main(cfg: DictConfig) -> None:
 		"git": _git_hash(),
 		"timestamp": datetime.now(ZoneInfo("Asia/Seoul")).isoformat(timespec="seconds"),
 		"config": config,
-		"segments": [segment.id for segment in selected]
+		"segments": [segment.id for segment in selected],
 	}
 	(output / "manifest.json").write_text(
 		json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"

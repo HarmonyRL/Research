@@ -23,8 +23,7 @@ _logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class PretrainArguments:
-	"""Settings of `PolicyTrainer`, as `transformers.TrainingArguments` for the options used here.
-	"""
+	"""Settings of `PolicyTrainer`, as `transformers.TrainingArguments` for the options used here."""
 
 	output_dir: str | Path
 	seed: int = 0

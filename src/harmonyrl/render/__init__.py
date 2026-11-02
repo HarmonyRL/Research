@@ -15,5 +15,5 @@ __all__ = [
 	"musicxml_to_formats",
 	"wav_to_mp3",
 	"write_midi",
-	"write_score"
+	"write_score",
 ]

@@ -31,7 +31,7 @@ class CriticArguments:
 	seed: int = 0
 	batch_tokens: int = 8192
 	lr: float = 2.0e-5
-	weight_decay: float = 0.1
+	weight_decay: float = 0.01
 	warmup_steps: int = 200
 	max_epochs: int = 6
 	patience: int = 2
@@ -223,6 +223,6 @@ def _distinct(
 	human: np.ndarray,
 	samples: Sequence[Sequence[ChordEvent]],
 ) -> list[np.ndarray]:
-	"""Inputs of the samples of `segment` that differ from `human`, the human accompnaiment's."""
+	"""Inputs of the samples of `segment` that differ from `human`, the human accompaniment's."""
 	inputs = (critic.token_ids(segment.melody, events) for events in samples)
 	return [x for x in inputs if not np.array_equal(x, human)]

@@ -23,9 +23,7 @@ class CriticConfig:
 	"""Structure of `ChordCritic`, which `save_pretrained` stores as `config.json`."""
 
 	backbone: str = "manoskary/musicbert"
-	backbone_revision: str = "345aee2cc65c1bf3018889e7e78bf88c162267d2"
 	tokenizer: str = "manoskary/miditok-REMI"
-	tokenizer_revision: str = "c7ac1609de2919d32f8f295118b3fbbfa9c2b132"
 	max_tokens: int = 1024
 
 
@@ -36,11 +34,9 @@ class ChordCritic(nn.Module, StrictModelHubMixin, license="cc-by-nc-sa-3.0"):
 		super().__init__()
 
 		self.config = config
-		self.tokenizer = MusicTokenizer.from_pretrained(
-			config.tokenizer, revision=config.tokenizer_revision
-		)
+		self.tokenizer = MusicTokenizer.from_pretrained(config.tokenizer)
 
-		backbone = BertConfig.from_pretrained(config.backbone, revision=config.backbone_revision)
+		backbone = BertConfig.from_pretrained(config.backbone)
 		self.encoder = BertModel(backbone, add_pooling_layer=False)
 		self.output = nn.Linear(backbone.hidden_size, 1)
 
@@ -48,9 +44,7 @@ class ChordCritic(nn.Module, StrictModelHubMixin, license="cc-by-nc-sa-3.0"):
 	def from_backbone(cls, config: CriticConfig) -> Self:
 		"""A critic with the pretrained encoder of `config.backbone` and an untrained output."""
 		critic = cls(config)
-		critic.encoder = BertModel.from_pretrained(
-			config.backbone, revision=config.backbone_revision, add_pooling_layer=False
-		)
+		critic.encoder = BertModel.from_pretrained(config.backbone, add_pooling_layer=False)
 		return critic
 
 	def forward(self, batch: CriticBatch) -> torch.Tensor:

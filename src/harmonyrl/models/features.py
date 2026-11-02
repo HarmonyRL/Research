@@ -45,7 +45,7 @@ _INDEX: dict[str, dict[object, int]] = {
 
 @dataclass(frozen=True)
 class MelodyFeatures:
-	"""Per-frame inputs for one melody, and its meter and section."""
+	"""Per-frame inputs for one melody, and its meter, section, and tempo."""
 
 	pitch_classes: np.ndarray
 	onset: np.ndarray

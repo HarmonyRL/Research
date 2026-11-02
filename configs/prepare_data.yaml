@@ -2,7 +2,7 @@
 defaults:
     - hydra_defaults
     - _self_
-source_dir: ~/projects/sheetsage-data/hooktheory
+source_dir: data/raw/hooktheory
 simplified_file: Hooktheory.json.gz
 raw_file: Hooktheory_Raw.json.gz
 output_dir: data/processed

@@ -19,10 +19,8 @@ split: standard
 restrict_no_chord: true
 holdout_fraction: 0.1
 model:
-    backbone: manoskary/musicbert
-    backbone_revision: 345aee2cc65c1bf3018889e7e78bf88c162267d2
-    tokenizer: manoskary/miditok-REMI
-    tokenizer_revision: c7ac1609de2919d32f8f295118b3fbbfa9c2b132
+    backbone: data/pretrained/musicbert
+    tokenizer: data/pretrained/miditok-REMI
     max_tokens: 1024
 train:
     batch_tokens: 8192

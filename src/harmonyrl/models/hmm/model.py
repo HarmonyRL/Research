@@ -1,11 +1,4 @@
-"""Hidden Markov model baseline that harmonizes a melody with 1 chord per slot.
-
-Follows the HMM of Yeh et al. (2021), "Automatic melody harmonization with triad chords: A
-comparative study": chord labels are hidden states, the pitch-class profile of the melody in each
-slot is a diagonal Gaussian emission, and transitions interpolate bigram and prior probabilities.
-Here labels are model-vocabulary chords relative to the local key, so each mode has its own
-parameters, and a slot spans the time from 1 strong beat to the next, a half bar in 4/4.
-"""
+"""Hidden Markov model baseline that harmonizes a melody with 1 chord per slot."""
 
 import json
 from collections import Counter, defaultdict
@@ -38,12 +31,7 @@ _CHORD_HEADS = tuple(head for head in HEAD_VALUES if head != "duration")
 
 @dataclass(frozen=True)
 class HMMConfig:
-	"""Settings of `ChordHMM`. The defaults follow Yeh et al. (2021) where they give a value.
-
-	A label needs `min_count` slots of a mode to be a state of that mode. The transition is
-	`(1 - beta) * prior + beta * bigram`. `min_variance` floors the emission variances, since a
-	label seen only on identical slots, such as rests, would otherwise have a variance of 0.
-	"""
+	"""Settings of `ChordHMM`. The defaults follow Yeh et al. (2021) where they give a value."""
 
 	min_count: int = 20
 	beta: float = 0.08
@@ -62,11 +50,7 @@ class HMMConfig:
 
 @dataclass(frozen=True, eq=False)
 class ModeParameters:
-	"""HMM parameters for the keys of 1 mode.
-
-	`prior` (labels,) and each row of `bigram` (labels, labels) sum to 1. `mean` and `variance`
-	(labels, 12) describe the pitch-class profiles of the slots each label was given.
-	"""
+	"""HMM parameters for the keys of 1 mode."""
 
 	labels: tuple[Label, ...]
 	prior: np.ndarray
@@ -76,11 +60,7 @@ class ModeParameters:
 
 
 class ChordHMM(ModelHubMixin, license="cc-by-nc-sa-3.0"):
-	"""Chord labels per slot, decoded with Viterbi.
-
-	Where the key changes between slots, the labels refer to different keys, so the new slot takes
-	the prior of its mode instead of a transition.
-	"""
+	"""Chord labels per slot, decoded with Viterbi."""
 
 	def __init__(self, config: HMMConfig, modes: dict[Mode, ModeParameters]) -> None:
 		self.config = config
@@ -88,12 +68,7 @@ class ChordHMM(ModelHubMixin, license="cc-by-nc-sa-3.0"):
 
 	@classmethod
 	def fit(cls, segments: Iterable[Segment], config: HMMConfig) -> Self:
-		"""Estimate the parameters from human accompaniments.
-
-		Each slot is labeled with the projected chord that sounds longest in it.
-		Labels below `config.min_count` slots of a mode are not states of that mode,
-		and their slots are left out of the estimates.
-		"""
+		"""Estimate the parameters from human accompaniments."""
 		counts: dict[Mode, Counter[Label]] = defaultdict(Counter)
 		bigrams: dict[Mode, Counter[tuple[Label, Label]]] = defaultdict(Counter)
 		profiles: dict[Mode, dict[Label, list[np.ndarray]]] = defaultdict(lambda: defaultdict(list))
@@ -143,13 +118,7 @@ class ChordHMM(ModelHubMixin, license="cc-by-nc-sa-3.0"):
 		return cls(config, modes)
 
 	def harmonize(self, melody: Melody) -> tuple[ChordEvent, ...]:
-		"""The most likely chord per slot, as events that tile `melody`.
-
-		Equal labels in a row merge into 1 event, split where an event would exceed
-		the maximum duration. No events express a longer stretch without a chord,
-		so such a stretch is decoded again with no chord ruled out on its slots.
-		Raises `ValueError` for a mode without parameters.
-		"""
+		"""The most likely chord per slot, as events that tile `melody`."""
 		bounds = decode.slots(melody)
 		keys = [melody.key_at(start) for start, _ in bounds]
 		profiles = decode.profiles(melody, bounds)

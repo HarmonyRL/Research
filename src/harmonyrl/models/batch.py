@@ -14,13 +14,7 @@ from .features import IGNORE, EventTargets, MelodyFeatures
 
 @dataclass(frozen=True)
 class Batch:
-	"""Padded model inputs and targets for several segments.
-
-	Frame tensors are (batch, frames), with `pitch_classes` adding 12 pitch classes.
-	Event tensors are (batch, events), with `values` adding the heads and each of `masks`
-	that head's values. `frame_mask` and `event_mask` are True on real frames and events.
-	Padded events have IGNORE targets and allow every value.
-	"""
+	"""Padded model inputs and targets for several segments."""
 
 	pitch_classes: torch.Tensor
 	onset: torch.Tensor
@@ -33,6 +27,7 @@ class Batch:
 	beats_per_bar: torch.Tensor
 	beat_unit: torch.Tensor
 	section: torch.Tensor
+	tempo: torch.Tensor
 	starts: torch.Tensor
 	values: torch.Tensor
 	masks: dict[str, torch.Tensor]
@@ -74,6 +69,7 @@ def collate(items: Sequence[tuple[MelodyFeatures, EventTargets]]) -> Batch:
 		beats_per_bar=torch.tensor([f.beats_per_bar for f in features]),
 		beat_unit=torch.tensor([f.beat_unit for f in features]),
 		section=torch.tensor([f.section for f in features]),
+		tempo=torch.tensor([f.tempo for f in features]),
 		starts=_pad([t.starts for t in targets]),
 		values=_pad([t.values for t in targets], IGNORE),
 		masks={head: _pad([t.masks[head] for t in targets], True) for head in HEAD_VALUES},
@@ -84,11 +80,7 @@ def collate(items: Sequence[tuple[MelodyFeatures, EventTargets]]) -> Batch:
 def length_batches(
 	lengths: Sequence[int], max_frames: int, rng: np.random.Generator
 ) -> list[list[int]]:
-	"""Indices grouped so that each batch pads to at most `max_frames` frames, in random order.
-
-	Segments of similar length go together to keep padding small, and a segment longer than
-	`max_frames` forms a batch alone. `rng` breaks ties in length and orders the batches.
-	"""
+	"""Indices grouped so that each batch pads to at most `max_frames` frames, in random order."""
 	batches: list[list[int]] = []
 	current: list[int] = []
 	order = np.lexsort((rng.random(len(lengths)), np.asarray(lengths)))

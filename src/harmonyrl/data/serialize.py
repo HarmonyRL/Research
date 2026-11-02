@@ -43,6 +43,7 @@ def segment_to_dict(segment: Segment) -> dict[str, Any]:
 				for span in melody.keys
 			],
 			"section": melody.section.value if melody.section is not None else None,
+			"tempo": melody.tempo,
 			"length": melody.length,
 		},
 		"events": [
@@ -76,6 +77,7 @@ def segment_from_dict(data: Mapping[str, Any]) -> Segment:
 				for span in melody["keys"]
 			),
 			section=Section(melody["section"]) if melody["section"] is not None else None,
+			tempo=melody["tempo"],
 			length=melody["length"],
 		),
 		events=tuple(

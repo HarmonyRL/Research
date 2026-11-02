@@ -1,7 +1,7 @@
 """Model inputs and training targets derived from schema types. A frame is one 8th note."""
 
 from dataclasses import dataclass
-from math import ceil, floor
+from math import ceil, floor, log2
 
 import numpy as np
 
@@ -28,6 +28,10 @@ OCTAVES = 11
 BEAT_STRENGTHS = 4
 """Values of `Meter.beat_strength`."""
 
+TEMPO_BUCKETS = 16
+"""Tempo buckets a quarter octave wide in 8th notes per minute, from 64 up.
+Faster tempos share the last bucket."""
+
 MODES = tuple(Mode)
 SECTIONS = tuple(Section)
 
@@ -41,12 +45,7 @@ _INDEX: dict[str, dict[object, int]] = {
 
 @dataclass(frozen=True)
 class MelodyFeatures:
-	"""Per-frame inputs for one melody, and its meter and section.
-
-	`pitch_classes` (frames, 12) holds the fraction of each frame that each pitch class sounds,
-	relative to the local tonic. `octave` is that of the longest note in the frame + 1, and
-	`section` is the index in `SECTIONS` + 1, so 0 means no note or an unknown section.
-	"""
+	"""Per-frame inputs for one melody, and its meter and section."""
 
 	pitch_classes: np.ndarray
 	onset: np.ndarray
@@ -58,6 +57,7 @@ class MelodyFeatures:
 	beats_per_bar: int
 	beat_unit: int
 	section: int
+	tempo: int
 
 
 def melody_features(melody: Melody) -> MelodyFeatures:
@@ -101,6 +101,7 @@ def melody_features(melody: Melody) -> MelodyFeatures:
 		beats_per_bar=min(meter.beats_per_bar, MAX_BEATS_PER_BAR),
 		beat_unit=0 if meter.beat_unit == 4 else 1,
 		section=0 if melody.section is None else SECTIONS.index(melody.section) + 1,
+		tempo=0 if melody.tempo is None else _tempo_bucket(melody.tempo, meter.beat_unit) + 1,
 	)
 
 
@@ -167,3 +168,8 @@ def event_targets(segment: Segment, *, restrict_no_chord: bool = False) -> Event
 		start += event.duration
 
 	return EventTargets(starts=starts, values=values, masks=masks)
+
+
+def _tempo_bucket(tempo: int, beat_unit: int) -> int:
+	eighths_per_minute = tempo * (3 if beat_unit == 8 else 2)
+	return min(max(round(4 * log2(eighths_per_minute / 64)), 0), TEMPO_BUCKETS - 1)

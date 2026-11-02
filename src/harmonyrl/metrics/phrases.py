@@ -1,10 +1,4 @@
-"""Phrase ends of a melody, read from the melody alone so that all its harmonizations share them.
-
-Segments are cut by hand from songs, mostly in multiples of 4 bars, so a phrase ends every 4 bars
-from the start, where the key changes, and at the end. When the 1st note starts in the 2nd half of
-the 1st bar and the whole bars do not come to a multiple of 4, that bar is a pickup and the 4-bar
-grid starts after it.
-"""
+"""Phrase ends of a melody, read from the melody alone so that all its harmonizations share them."""
 
 from harmonyrl.schema import Melody
 

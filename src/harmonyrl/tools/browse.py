@@ -1,10 +1,4 @@
-"""Read-only localhost file server for browsing rendered audio and scores.
-
-Serves a directory tree over HTTP with a dark directory page that plays WAV/MP3
-inline, opens PDFs in the browser's viewer, and offers downloads for everything
-else. Binds to 127.0.0.1 only: reach it through an SSH tunnel
-(`ssh -L 8000:localhost:8000`) rather than exposing a port.
-"""
+"""Read-only localhost file server for browsing rendered audio and scores."""
 
 import html
 import signal
@@ -36,14 +30,11 @@ audio { height: 2rem; width: 22rem; max-width: 60vw; }
 
 
 def serve(root: Path, port: int) -> None:
-	"""Serve `root` on 127.0.0.1:`port` until interrupted.
-
-	Ctrl+C and SIGTERM are the normal ways to stop the server: the interrupt is
-	caught, the listening socket is closed, and the process exits with status 0.
-	"""
+	"""Serve `root` on 127.0.0.1:`port` until interrupted."""
 	root = root.resolve()
 	server = ThreadingHTTPServer(("127.0.0.1", port), _make_handler(root))
 	signal.signal(signal.SIGTERM, _terminate)
+
 	try:
 		server.serve_forever()
 	except KeyboardInterrupt:
@@ -62,11 +53,13 @@ def _make_handler(root: Path) -> type[BaseHTTPRequestHandler]:
 			requested = urllib.parse.urlparse(self.path).path
 			relative = urllib.parse.unquote(requested).lstrip("/")
 			target = (root / relative).resolve()
+
 			try:
 				target.relative_to(root)
 			except ValueError:
 				self.send_error(403, "outside the served root")
 				return
+
 			if target.is_dir():
 				self._send_html(_listing(root, target))
 			elif target.is_file():
@@ -89,6 +82,7 @@ def _make_handler(root: Path) -> type[BaseHTTPRequestHandler]:
 			)
 			size = target.stat().st_size
 			range_header = self.headers.get("Range")
+
 			if range_header is not None and range_header.startswith("bytes="):
 				byte_range = _parse_range(range_header, size)
 				if byte_range is None:
@@ -97,6 +91,7 @@ def _make_handler(root: Path) -> type[BaseHTTPRequestHandler]:
 					self.send_header("Content-Length", "0")
 					self.end_headers()
 					return
+
 				start, end = byte_range
 				length = end - start + 1
 				self.send_response(206)
@@ -120,6 +115,7 @@ def _make_handler(root: Path) -> type[BaseHTTPRequestHandler]:
 			with target.open("rb") as f:
 				if start:
 					f.seek(start)
+
 				while remaining > 0:
 					chunk = f.read(min(1 << 16, remaining))
 					if not chunk:
@@ -133,6 +129,7 @@ def _make_handler(root: Path) -> type[BaseHTTPRequestHandler]:
 				self.wfile.write(data)
 			except BrokenPipeError, ConnectionResetError:
 				return False
+
 			return True
 
 	return Handler
@@ -142,10 +139,13 @@ def _parse_range(header: str, size: int) -> tuple[int, int] | None:
 	"""Parse a single `bytes=start-end` header against a file of `size` bytes."""
 	if size == 0:
 		return None
+
 	spec = header.removeprefix("bytes=").strip()
 	if "," in spec or "-" not in spec:
 		return None
+
 	start_str, end_str = spec.split("-", 1)
+
 	try:
 		if not start_str:
 			suffix_len = int(end_str)
@@ -156,6 +156,7 @@ def _parse_range(header: str, size: int) -> tuple[int, int] | None:
 		end = size - 1 if not end_str else min(int(end_str), size - 1)
 	except ValueError:
 		return None
+
 	if start < 0 or start >= size or start > end:
 		return None
 	return start, end
@@ -164,6 +165,7 @@ def _parse_range(header: str, size: int) -> tuple[int, int] | None:
 def _url_path(relative: Path, *, trailing_slash: bool = False) -> str:
 	if not relative.parts:
 		return "/"
+
 	encoded = "/".join(urllib.parse.quote(part) for part in relative.parts)
 	return f"/{encoded}/" if trailing_slash else f"/{encoded}"
 
@@ -183,6 +185,7 @@ def _icon_for(suffix: str) -> str:
 def _listing(root: Path, directory: Path) -> str:
 	relative = directory.relative_to(root)
 	crumbs = ' / <a href="/">root</a>'
+
 	for i, part in enumerate(relative.parts):
 		sub = Path(*relative.parts[: i + 1])
 		crumbs += f' / <a href="{_url_path(sub, trailing_slash=True)}">{html.escape(part)}</a>'
@@ -194,6 +197,7 @@ def _listing(root: Path, directory: Path) -> str:
 		rows.append(
 			f"<tr><td class='name'>📁 <a href='{parent_href}'>..</a></td><td></td><td></td></tr>"
 		)
+
 	for entry in entries:
 		name = html.escape(entry.name)
 		entry_rel = relative / entry.name
@@ -204,6 +208,7 @@ def _listing(root: Path, directory: Path) -> str:
 				f"<td></td><td class='size'>{_count(entry)} items</td></tr>"
 			)
 			continue
+
 		stat = entry.stat()
 		size = (
 			f"{stat.st_size / 1e6:.1f} MB" if stat.st_size > 1e6 else f"{stat.st_size / 1e3:.0f} KB"
@@ -211,6 +216,7 @@ def _listing(root: Path, directory: Path) -> str:
 		href = _url_path(entry_rel)
 		suffix = entry.suffix.lower()
 		icon = _icon_for(suffix)
+
 		if suffix in AUDIO_TYPES:
 			player = f"<audio controls preload='none' src='{href}'></audio>"
 			rows.append(
@@ -225,6 +231,7 @@ def _listing(root: Path, directory: Path) -> str:
 			name_cell = f"<td class='name'>{icon} <a href='{href}' download>{name}</a></td>"
 			open_cell = f"<td><a href='{href}' download>download</a></td>"
 			rows.append(f"<tr>{name_cell}{open_cell}<td class='size'>{size}</td></tr>")
+
 	title = html.escape(str(relative) if relative.parts else "files")
 	return f"""<!doctype html><html><head><meta charset='utf-8'>
 <title>{title}</title><style>{_STYLE}</style></head>

@@ -15,7 +15,6 @@ from omegaconf import DictConfig, OmegaConf
 
 from harmonyrl.data import read_segments
 from harmonyrl.render import (
-	DEFAULT_TEMPO,
 	melody_to_score,
 	midi_to_wav,
 	musicxml_to_formats,
@@ -45,24 +44,20 @@ def main(cfg: DictConfig) -> None:
 	)
 
 	output = Path(HydraConfig.get().runtime.output_dir)
-	tempos = _load_tempos(paths)
-	rendered: dict[str, int] = {}
 
 	for segment in selected:
-		tempo = tempos.get(segment.id, config.get("default_tempo", DEFAULT_TEMPO))
-		_render_segment(segment, output=output, formats=formats, tempo=tempo, config=config)
-		rendered[segment.id] = tempo
+		_render_segment(segment, output=output, formats=formats, config=config)
 
 	manifest = {
 		"git": _git_hash(),
 		"timestamp": datetime.now(ZoneInfo("Asia/Seoul")).isoformat(timespec="seconds"),
 		"config": config,
-		"tempos": rendered,
+		"segments": [segment.id for segment in selected]
 	}
 	(output / "manifest.json").write_text(
 		json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
 	)
-	print(f"rendered {len(rendered)} segments to {output}")
+	print(f"rendered {len(selected)} segments to {output}")
 
 
 def _select_segments(
@@ -94,13 +89,13 @@ def _render_segment(
 	*,
 	output: Path,
 	formats: Sequence[str],
-	tempo: int,
 	config: dict[str, Any],
 ) -> None:
 	format_set = set(formats)
 	base = output / segment.id
+
 	if "midi" in format_set or "wav" in format_set or "mp3" in format_set:
-		write_midi(segment.melody, segment.events, base.with_suffix(".mid"), tempo)
+		write_midi(segment.melody, segment.events, base.with_suffix(".mid"))
 	if "wav" in format_set or "mp3" in format_set:
 		midi_to_wav(
 			base.with_suffix(".mid"),
@@ -113,11 +108,13 @@ def _render_segment(
 		wav_to_mp3(
 			base.with_suffix(".wav"), base.with_suffix(".mp3"), bitrate=config["mp3_bitrate"]
 		)
+
 	if not (format_set & _SCORE_FORMATS):
 		return
 
 	musicxml_path = base.with_suffix(".musicxml")
-	write_score(melody_to_score(segment.melody, segment.events, tempo=tempo), musicxml_path)
+	write_score(melody_to_score(segment.melody, segment.events), musicxml_path)
+
 	targets: list[Path] = []
 	if "pdf" in format_set:
 		targets.append(base.with_suffix(".pdf"))
@@ -129,15 +126,9 @@ def _render_segment(
 		directory = output / f"{segment.id}.mscx.d"
 		directory.mkdir(exist_ok=True)
 		targets.append(directory / f"{segment.id}.mscx")
+
 	if targets:
 		musicxml_to_formats(musicxml_path, targets, Path(config["mscore"]).expanduser())
-
-
-def _load_tempos(segments_paths: list[Path]) -> dict[str, int]:
-	tempos_path = segments_paths[0].parent / "tempos.json"
-	if not tempos_path.exists():
-		return {}
-	return json.loads(tempos_path.read_text(encoding="utf-8"))
 
 
 def _git_hash() -> str:

@@ -8,7 +8,6 @@ import music21
 from harmonyrl.schema import Key, KeySpan, Meter, Mode, Note
 
 from .common import (
-	DEFAULT_TEMPO,
 	ImportedMelody,
 	bar_ceiling,
 	beat_tempo_from_quarter,
@@ -26,13 +25,7 @@ def melody_from_musicxml(
 	meter: Meter | None = None,
 	key: Key | None = None,
 ) -> ImportedMelody:
-	"""Read a monophonic melody from a MusicXML file.
-
-	`part` selects a part by index; otherwise the highest-register part wins.
-	Rests and grace notes are dropped, pickup bars are padded so position 0 is a
-	barline, tied notes join into one, chords collapse to their highest note, and
-	offsets keep exact fraction values — tuplets survive the import. A meter change
-	or an unrepresentable meter raises rather than being dropped."""
+	"""Read a monophonic melody from a MusicXML file."""
 	score = music21.converter.parse(str(path))
 	voice = _select_part(score, part)
 	resolved_meter = meter or _meter_from_score(score, voice)
@@ -63,19 +56,15 @@ def melody_from_musicxml(
 			notes.append(Note(onset, duration, pitch))
 
 	declared = _declared_key(score, voice)
-	# A file carries no trace of how long the rests after the last note were, so
-	# the melody's length is recovered as the end of the bar containing its last
-	# note — the same rule a human would read off the score.
 	end = max((note.offset for note in notes), default=Fraction(0))
 	length = max(1, bar_ceiling(end, resolved_meter.bar_eighths))
-	# A key signature names a major tonic; the relative minor shares it, so the
-	# signature only narrows the candidates — the notes pick the mode.
 	signature_tonic = None if declared is None else declared.tonic
 	resolved_key = (
 		key if key is not None else estimate_key(tuple(notes), signature_tonic=signature_tonic)
 	)
-	melody = build_melody(notes, resolved_meter, (KeySpan(0, resolved_key),), length)
-	return ImportedMelody(melody=melody, tempo=tempo, declared_key=declared)
+	melody = build_melody(notes, resolved_meter, (KeySpan(0, resolved_key),), length, tempo=tempo)
+
+	return ImportedMelody(melody=melody, declared_key=declared)
 
 
 def _pickup_eighths(voice: music21.stream.Stream) -> Fraction:
@@ -84,6 +73,7 @@ def _pickup_eighths(voice: music21.stream.Stream) -> Fraction:
 	measures = list(voice.getElementsByClass(music21.stream.Measure))
 	if measures and measures[0].paddingLeft > 0:
 		return snap(Fraction(measures[0].paddingLeft) * 2)
+
 	return Fraction(0)
 
 
@@ -101,6 +91,7 @@ def _extend_tied_note(notes: list[Note], pitch: int, onset: Fraction, end_pos: F
 		if previous.pitch == pitch and previous.offset == onset and end_pos > previous.onset:
 			notes[index] = Note(previous.onset, end_pos - previous.onset, previous.pitch)
 			return True
+
 	return False
 
 
@@ -111,12 +102,9 @@ def _select_part(score: music21.stream.Stream, part: int | None) -> music21.stre
 	if part is not None:
 		if not 0 <= part < len(parts):
 			raise ValueError(f"part {part} out of range (0-{len(parts) - 1})")
+
 		return parts[part]
 
-	# Polyphonic scores name the melody in the top voice: pick the part with the
-	# highest average pitch (note count breaks ties). "Most notes" picks inner
-	# voices instead — on a Bach chorale it selects the tenor at 0% overlap while
-	# the soprano part is a 100% match.
 	def melody_key(candidate: music21.stream.Stream) -> tuple[float, int]:
 		pitches = [
 			n.pitch.midi if isinstance(n, music21.note.Note) else max(p.midi for p in n.pitches)
@@ -134,33 +122,36 @@ def _meter_from_score(score: music21.stream.Stream, voice: music21.stream.Stream
 		signatures = list(score.recurse().getElementsByClass(music21.meter.TimeSignature))
 	if not signatures:
 		raise ValueError("no time signature in MusicXML; pass meter=")
+
 	distinct = list(dict.fromkeys((s.numerator, s.denominator) for s in signatures))
 	if len(distinct) > 1:
 		raise ValueError("time signature changes in MusicXML; split the song and pass meter=")
+
 	numerator, denominator = distinct[0]
 	return meter_from_ratio(numerator, denominator)
 
 
-def _tempo_from_score(score: music21.stream.Stream, meter: Meter) -> int:
+def _tempo_from_score(score: music21.stream.Stream, meter: Meter) -> int | None:
 	for mark in score.recurse().getElementsByClass(music21.tempo.MetronomeMark):
 		quarter_bpm = mark.getQuarterBPM()
 		if quarter_bpm is not None and quarter_bpm > 0:
 			return beat_tempo_from_quarter(float(quarter_bpm), meter)
-	return DEFAULT_TEMPO
+
+	return None
 
 
 def _declared_key(score: music21.stream.Stream, voice: music21.stream.Stream) -> Key | None:
-	"""Major tonic named by the file's first key signature, if any.
-
-	music21's `asKey()` always names the major key of the signature, so this
-	returns a major Key; the mode itself is decided later from the notes."""
+	"""Major tonic named by the file's first key signature, if any."""
 	signatures = list(voice.recurse().getElementsByClass(music21.key.KeySignature))
 	if not signatures:
 		signatures = list(score.recurse().getElementsByClass(music21.key.KeySignature))
+
 	for signature in signatures:
 		try:
 			named = signature.asKey()
 		except music21.exceptions21.Music21Exception:
 			return None
+
 		return Key(named.tonic.pitchClass, Mode.MAJOR)
+
 	return None

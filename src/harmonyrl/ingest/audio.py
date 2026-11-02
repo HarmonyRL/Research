@@ -48,29 +48,24 @@ def melody_from_audio(
 	tempo: int,
 	key: Key | None = None,
 ) -> ImportedMelody:
-	"""Read a melody from a monophonic recording.
-
-	`meter` and `tempo` are required — a recording carries no reliable tempo
-	metadata (`tempo` is dotted-quarter BPM for `x/8` meters, quarter-note BPM
-	for `x/4`, matching the renderer). Frames come from pyin; contiguous voiced
-	runs preserve rests, pitch steps inside a run split notes with hysteresis,
-	and onsets snap to 1/48 of an 8th note."""
+	"""Read a melody from a monophonic recording."""
 	eighth = eighth_seconds(tempo, meter)
 	samples, sample_rate = librosa.load(str(path), sr=None, mono=True)
 	hop = max(1, int(sample_rate * FRAME_MS / 1000))
 	f0, voiced_flag, probability = librosa.pyin(
 		samples, fmin=FMIN, fmax=FMAX, sr=sample_rate, hop_length=hop
 	)
-	# pyin marks low-level noise and quiet reverb decay tails as voiced because its
-	# autocorrelation is amplitude-invariant; require both tracker confidence and
-	# audible frame energy relative to the melody.
+
 	rms = librosa.feature.rms(y=samples, hop_length=hop)[0][: len(f0)]
 	valid_voiced = voiced_flag & ~np.isnan(f0)
+
 	if not np.any(valid_voiced):
 		raise ValueError(f"no voiced melody found in {path}")
+
 	energy_floor = float(np.percentile(rms[valid_voiced], 95)) * (10.0 ** (RMS_FLOOR_DB / 20.0))
 	tracked = valid_voiced & (probability >= PROBABILITY_MIN) & (rms >= energy_floor)
 	tracked_index = np.where(tracked)[0]
+
 	if not len(tracked_index):
 		raise ValueError(f"no voiced melody found in {path}")
 
@@ -81,9 +76,6 @@ def melody_from_audio(
 	prev_end_frame = -1
 	for run in _voiced_runs(tracked_index):
 		for first_frame, last_frame, median in _segments_in_run(run, f0):
-			# Note attacks are voiced but uncertain, so the probability filter pushes
-			# every onset late; reach back over contiguous audible frames at the same
-			# pitch without crossing into the previous note.
 			while (
 				first_frame > prev_end_frame + 1
 				and valid_voiced[first_frame - 1]
@@ -91,10 +83,12 @@ def melody_from_audio(
 				and abs(12 * np.log2(f0[first_frame - 1] / median)) <= SPLIT_SEMITONES
 			):
 				first_frame -= 1
+
 			prev_end_frame = last_frame
 			onset = to_eighths(first_frame * hop / sample_rate)
 			duration = to_eighths((last_frame + 1) * hop / sample_rate) - onset
 			pitch = round(69 + 12 * np.log2(median / 440.0))
+
 			if duration > 0 and 0 <= pitch <= 127:
 				notes.append(Note(onset, duration, pitch))
 
@@ -104,9 +98,14 @@ def melody_from_audio(
 	resolved_key = key if key is not None else estimate_key(tuple(notes))
 	end = max(note.offset for note in notes)
 	melody = build_melody(
-		notes, meter, (KeySpan(0, resolved_key),), max(1, bar_ceiling(end, meter.bar_eighths))
+		notes,
+		meter,
+		(KeySpan(0, resolved_key),),
+		max(1, bar_ceiling(end, meter.bar_eighths)),
+		tempo=tempo,
 	)
-	return ImportedMelody(melody=melody, tempo=tempo)
+
+	return ImportedMelody(melody=melody)
 
 
 def _voiced_runs(tracked_index: np.ndarray) -> list[np.ndarray]:
@@ -123,20 +122,25 @@ def _segments_in_run(run_frames: np.ndarray, f0: np.ndarray) -> list[tuple[int, 
 	voiced = f0[run_frames]
 	raw: list[tuple[int, int]] = []
 	start = 0
+
 	for i in range(1, len(voiced) + 1):
 		if i == len(voiced):
 			raw.append((start, i - 1))
 			break
+
 		window = voiced[i : i + SPLIT_FRAMES]
 		if len(window) < SPLIT_FRAMES:
 			continue
+
 		median = float(np.median(voiced[start:i]))
 		deviations = 12 * np.log2(window / median)
+
 		if np.all(deviations > SPLIT_SEMITONES) or np.all(deviations < -SPLIT_SEMITONES):
 			raw.append((start, i - 1))
 			start = i
 
 	merged: list[tuple[int, int]] = []
+
 	for seg_start, seg_end in raw:
 		span = int(run_frames[seg_end] - run_frames[seg_start] + 1)
 		if merged and span < MIN_NOTE_FRAMES:

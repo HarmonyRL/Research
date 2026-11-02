@@ -19,18 +19,17 @@ split: standard
 restrict_no_chord: true
 holdout_fraction: 0.1
 model:
-    dim: 192
-    attention_heads: 4
-    layers: 4
-    ff_mult: 4
-    dropout: 0.1
+    backbone: manoskary/musicbert
+    backbone_revision: 345aee2cc65c1bf3018889e7e78bf88c162267d2
+    tokenizer: manoskary/miditok-REMI
+    tokenizer_revision: c7ac1609de2919d32f8f295118b3fbbfa9c2b132
+    max_tokens: 1024
 train:
-    max_frames: 8192
-    lr: 3.0e-4
-    weight_decay: 0.1
-    warmup_steps: 300
-    max_epochs: 60
-    patience: 4
+    batch_tokens: 8192
+    lr: 2.0e-5
+    weight_decay: 0.01
+    warmup_steps: 200
+    max_epochs: 6
+    patience: 2
     grad_clip: 1.0
     label_smoothing: 0.1
-    section_dropout: 0.2

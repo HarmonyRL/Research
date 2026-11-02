@@ -39,6 +39,7 @@ def repeated_phrase_agreement(melody: Melody, events: Sequence[ChordEvent]) -> t
 	spans = chord_spans(melody, events)
 	frames = [span.chord for span in spans for _ in range(span.end - span.start)]
 	matching: dict[tuple, list[int]] = defaultdict(list)
+
 	for start, end in phrase_windows(melody):
 		notes = tuple(
 			(note.onset - start, note.duration, note.pitch)
@@ -51,10 +52,12 @@ def repeated_phrase_agreement(melody: Melody, events: Sequence[ChordEvent]) -> t
 	size = PHRASE_BARS * melody.meter.bar_eighths
 	agreeing = 0
 	compared = 0
+
 	for starts in matching.values():
 		for a, b in combinations(starts, 2):
 			agreeing += sum(frames[a + k] == frames[b + k] for k in range(size))
 			compared += size
+
 	return agreeing, compared
 
 
@@ -65,14 +68,17 @@ def key_consistency(melody: Melody, events: Sequence[ChordEvent]) -> tuple[int, 
 	"""
 	in_key = 0
 	under_chord = 0
+
 	for span in chord_spans(melody, events):
 		if span.chord is None:
 			continue
+
 		for position in range(span.start, span.end):
 			key = melody.key_at(position)
 			scale = {(key.tonic + step) % 12 for step in key.mode.scale}
 			under_chord += 1
 			in_key += span.pitch_classes <= scale
+
 	return in_key, under_chord
 
 
@@ -86,5 +92,6 @@ def _function(span: ChordSpan) -> str:
 	chord = span.chord
 	if chord is None:
 		return "N"
+
 	name = f"{chord.applied}/{chord.root}" if chord.applied else str(chord.root)
 	return f"{name}[{chord.borrowed}]" if chord.borrowed is not None else name

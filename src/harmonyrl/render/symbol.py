@@ -23,9 +23,6 @@ _REL_MAJOR_OFFSET: dict[Mode, int] = {
 	Mode.LOCRIAN: 11,
 }
 
-# Added degrees follow the MusicXML convention that an unaltered added 7th is the
-# minor seventh, so step 10 (a flat 7th) is "add7" and step 11 (a major 7th)
-# "add#7" — the reverse of what the suffixes look like they mean.
 _ADD_STEP: dict[int, str] = {
 	1: "addb9",
 	2: "add9",
@@ -39,11 +36,6 @@ _ADD_STEP: dict[int, str] = {
 	11: "add#7",
 }
 
-# music21 emits these chord kinds, but the MusicXML kind enumeration has no such
-# values, and readers that do not know them (MuseScore) print the raw kind string
-# instead of a chord symbol. Each maps to a valid kind plus degrees, where "add"
-# alters relative to a dominant reference (an unaltered 7 is the minor seventh)
-# and "alter" relative to the degree already in the kind.
 _KIND_REWRITES: dict[str, tuple[str, tuple[tuple[str, int, int], ...]]] = {
 	"suspended-fourth-seventh": ("suspended-fourth", (("add", 7, 0),)),
 	"augmented-major-seventh": ("major-seventh", (("alter", 5, 1),)),
@@ -71,20 +63,26 @@ def chord_symbol(chord: RawChord, key: Key) -> music21.harmony.ChordSymbol:
 	bass_pc, pitch_classes = chord_pitch_classes(chord, key)
 	names = _spellings(_spelling_key(chord, key))
 	root_pc = _root_pitch_class(chord, key)
+
 	intervals = frozenset((pc - root_pc) % 12 for pc in pitch_classes)
 	figure = _figure_name(names[root_pc]) + _figure_suffix(intervals)
+
 	if bass_pc != root_pc:
 		figure += "/" + _figure_name(names[bass_pc])
+
 	cs = music21.harmony.ChordSymbol(figure=figure)
 	_rewrite_kind(cs)
+
 	return cs
 
 
 def _rewrite_kind(cs: music21.harmony.ChordSymbol) -> None:
 	if cs.chordKind not in _KIND_REWRITES:
 		return
+
 	kind, degrees = _KIND_REWRITES[cs.chordKind]
 	cs.chordKind = kind
+
 	for mod_type, degree, alter in degrees:
 		cs.addChordStepModification(
 			music21.harmony.ChordStepModification(mod_type, degree, alter),
@@ -94,10 +92,13 @@ def _rewrite_kind(cs: music21.harmony.ChordSymbol) -> None:
 
 def _spelling_key(chord: RawChord, key: Key) -> Key:
 	base = Key(key.tonic, chord.borrowed) if isinstance(chord.borrowed, Mode) else key
+
 	if not chord.applied:
 		return base
+
 	scale = chord.borrowed if isinstance(chord.borrowed, tuple) else base.mode.scale
 	target_pc = (key.tonic + scale[chord.root - 1]) % 12
+
 	return Key(target_pc, Mode.MAJOR)
 
 
@@ -109,15 +110,19 @@ def _spellings(key: Key) -> dict[int, str]:
 	tonic_name = fallback[key.tonic]
 	names: dict[int, str] = {}
 	letter = _LETTERS.index(tonic_name[0])
+
 	for offset in key.mode.scale:
 		target = (key.tonic + offset) % 12
 		natural = _LETTER_PC[_LETTERS[letter]]
+
 		diff = (target - natural) % 12
 		if diff > 6:
 			diff -= 12
 		if diff in (-1, 0, 1):
 			names[target] = _LETTERS[letter] + {-1: "b", 0: "", 1: "#"}[diff]
+
 		letter = (letter + 1) % 7
+
 	return {pc: names.get(pc, fallback[pc]) for pc in range(12)}
 
 
@@ -131,8 +136,10 @@ def _root_pitch_class(chord: RawChord, key: Key) -> int:
 		else chord.borrowed.scale
 	)
 	root_offset = scale[chord.root - 1]
+
 	if chord.applied:
 		root_offset += Mode.MAJOR.scale[chord.applied - 1]
+
 	return (key.tonic + root_offset) % 12
 
 
@@ -209,8 +216,6 @@ def _figure_suffix(intervals: frozenset[int]) -> str:
 			kind = "maj7"
 			mods.append("omit3")
 			if suspension:
-				# music21 has no maj7sus4 figure; "maj7omit3add4" parses and
-				# MuseScore resolves it to maj7sus4.
 				mods.append(f"add{suspension}")
 		elif has_min7:
 			used.add(10)
@@ -255,6 +260,7 @@ def _extended_seventh_kind(
 	can_11 = can_9 and 5 in remaining and 6 not in remaining
 	can_13 = can_11 and 9 in remaining and 8 not in remaining
 	prefix = ("Maj" if has_maj7 else "") if has_maj3 else ("mM" if has_maj7 else "m")
+
 	if can_13:
 		return f"{prefix}13", frozenset({2, 5, 9})
 	if can_11:

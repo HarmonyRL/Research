@@ -1,7 +1,6 @@
 """Evaluate the harmonizations of 1 system on a data split against the human accompaniments."""
 
 import json
-import shutil
 import subprocess
 from collections.abc import Callable, Sequence
 from datetime import datetime
@@ -54,10 +53,6 @@ def main(cfg: DictConfig) -> None:
 			],
 			run_dir / f"harmonizations-{i}.jsonl",
 		)
-
-	tempos = data_dir / "tempos.json"
-	if tempos.exists():
-		shutil.copy(tempos, run_dir / "tempos.json")
 
 	metrics = evaluate_corpus(segments, harmonizations, train)
 	metrics |= _critic_logits(config["critics"], segments, harmonizations)

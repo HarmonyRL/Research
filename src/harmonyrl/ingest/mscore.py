@@ -32,6 +32,7 @@ def melody_from_mscore(
 		)
 		if not musicxml.exists():
 			raise RuntimeError(f"mscore produced no MusicXML from {path}")
+
 		return melody_from_musicxml(musicxml, part=part, meter=meter, key=key)
 
 
@@ -41,4 +42,5 @@ def _default_mscore() -> Path:
 		raise ValueError(
 			"mscore not found at ~/.local/bin/mscore; pass mscore=Path(...) explicitly"
 		)
+
 	return path

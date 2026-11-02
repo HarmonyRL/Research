@@ -1,41 +1,32 @@
-"""ChordCritic: a bidirectional Transformer over frames that judges a whole harmonization."""
+"""ChordCritic: a pretrained symbolic-music encoder that judges a whole harmonization."""
 
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from itertools import batched
+from typing import Self
 
+import numpy as np
 import torch
+from miditok import MusicTokenizer
 from torch import nn
+from transformers import BertConfig, BertModel
 
-from harmonyrl.schema import HEAD_VALUES, ChordEvent, Melody
+from harmonyrl.schema import ChordEvent, Melody
 
-from ..attention import Block
-from ..features import (
-	BAR_POSITIONS,
-	BEAT_STRENGTHS,
-	MAX_BEATS_PER_BAR,
-	MODES,
-	OCTAVES,
-	SECTIONS,
-)
-from ..hub import StrictModelHubMixin, head_values_json
+from ..hub import StrictModelHubMixin
 from .batch import CriticBatch, collate
-from .features import CHORD_HEADS, critic_inputs
+from .tokens import token_ids
 
 
 @dataclass(frozen=True)
 class CriticConfig:
-	"""Structure of `ChordCritic`, which `save_pretrained` stores as `config.json`.
+	"""Structure of `ChordCritic`, which `save_pretrained` stores as `config.json`."""
 
-	`head_values` is the vocabulary the chord inputs index, checked against the code that loads it.
-	"""
-
-	dim: int = 192
-	attention_heads: int = 4
-	layers: int = 4
-	ff_mult: int = 4
-	dropout: float = 0.1
-	head_values: dict[str, list] = field(default_factory=head_values_json)
+	backbone: str = "manoskary/musicbert"
+	backbone_revision: str = "345aee2cc65c1bf3018889e7e78bf88c162267d2"
+	tokenizer: str = "manoskary/miditok-REMI"
+	tokenizer_revision: str = "c7ac1609de2919d32f8f295118b3fbbfa9c2b132"
+	max_tokens: int = 1024
 
 
 class ChordCritic(nn.Module, StrictModelHubMixin, license="cc-by-nc-sa-3.0"):
@@ -44,76 +35,37 @@ class ChordCritic(nn.Module, StrictModelHubMixin, license="cc-by-nc-sa-3.0"):
 	def __init__(self, config: CriticConfig) -> None:
 		super().__init__()
 
-		if config.head_values != head_values_json():
-			raise ValueError("head_values differ from the HEAD_VALUES of this code")
-
 		self.config = config
-		dim = config.dim
+		self.tokenizer = MusicTokenizer.from_pretrained(
+			config.tokenizer, revision=config.tokenizer_revision
+		)
 
-		self.pitch_classes = nn.Linear(12, dim)
-		self.frame_embeddings = nn.ModuleDict(
-			{
-				"onset": nn.Embedding(2, dim),
-				"octave": nn.Embedding(OCTAVES + 1, dim),
-				"bar_position": nn.Embedding(BAR_POSITIONS, dim),
-				"beat_strength": nn.Embedding(BEAT_STRENGTHS, dim),
-				"mode": nn.Embedding(len(MODES), dim),
-				"key_start": nn.Embedding(2, dim),
-			}
-		)
-		self.melody_embeddings = nn.ModuleDict(
-			{
-				"beats_per_bar": nn.Embedding(MAX_BEATS_PER_BAR + 1, dim),
-				"beat_unit": nn.Embedding(2, dim),
-				"section": nn.Embedding(len(SECTIONS) + 1, dim),
-			}
-		)
-		self.chord_values = nn.ModuleList(
-			nn.Embedding(len(HEAD_VALUES[head]) + 1, dim) for head in CHORD_HEADS
-		)
-		self.chord_tones = nn.Linear(12, dim)
-		self.chord_bass = nn.Embedding(13, dim)
-		self.chord_onset = nn.Embedding(2, dim)
+		backbone = BertConfig.from_pretrained(config.backbone, revision=config.backbone_revision)
+		self.encoder = BertModel(backbone, add_pooling_layer=False)
+		self.output = nn.Linear(backbone.hidden_size, 1)
 
-		self.blocks = nn.ModuleList(
-			Block(dim, config.attention_heads, config.ff_mult, config.dropout, cross=False)
-			for _ in range(config.layers)
+	@classmethod
+	def from_backbone(cls, config: CriticConfig) -> Self:
+		"""A critic with the pretrained encoder of `config.backbone` and an untrained output."""
+		critic = cls(config)
+		critic.encoder = BertModel.from_pretrained(
+			config.backbone, revision=config.backbone_revision, add_pooling_layer=False
 		)
-		self.norm = nn.LayerNorm(dim)
-		self.pool = nn.Linear(dim, 1)
-		self.output = nn.Sequential(
-			nn.Linear(dim, dim),
-			nn.GELU(),
-			nn.Linear(dim, 1),
-		)
+		return critic
 
 	def forward(self, batch: CriticBatch) -> torch.Tensor:
 		"""Logits (batch,)."""
-		x = self.pitch_classes(batch.pitch_classes) + self.chord_tones(batch.chord_tones)
-
-		for name, embedding in self.frame_embeddings.items():
-			x = x + embedding(getattr(batch, name).long())
-
-		for name, embedding in self.melody_embeddings.items():
-			x = x + embedding(getattr(batch, name))[:, None]
-
-		for index, embedding in enumerate(self.chord_values):
-			x = x + embedding(batch.chord_values[..., index])
-
-		x = x + self.chord_bass(batch.chord_bass) + self.chord_onset(batch.chord_onset.long())
-
-		size, frames = batch.frame_mask.shape
-		times = torch.arange(frames, device=x.device).expand(size, frames)
-		mask = batch.frame_mask[:, None].expand(size, frames, frames)
-
-		for block in self.blocks:
-			x = block(x, times, mask)
-
-		x = self.norm(x)
-		weights = self.pool(x).squeeze(-1).masked_fill(~batch.frame_mask, -torch.inf).softmax(dim=1)
-		pooled = (weights[..., None] * x).sum(dim=1)
+		states = self.encoder(
+			input_ids=batch.input_ids, attention_mask=batch.attention_mask
+		).last_hidden_state
+		weights = batch.attention_mask[..., None].to(states.dtype)
+		pooled = (states * weights).sum(dim=1) / weights.sum(dim=1)
 
 		return self.output(pooled).squeeze(-1)
+
+	def token_ids(self, melody: Melody, events: Sequence[ChordEvent]) -> np.ndarray:
+		"""The input of 1 harmonization."""
+		return token_ids(self.tokenizer, melody, events, self.config.max_tokens)
 
 	@torch.no_grad()
 	def score(
@@ -122,17 +74,17 @@ class ChordCritic(nn.Module, StrictModelHubMixin, license="cc-by-nc-sa-3.0"):
 		harmonizations: Sequence[Sequence[ChordEvent]],
 		batch_size: int = 64,
 	) -> list[float]:
-		"""Logit of each harmonization, scored `batch_size` at a time among similar lengths.
+		"""Logits of each harmonization, scored `batch_size` at a time among similar lengths.
 
 		The critic should be run in eval mode.
 		"""
 		device = next(self.parameters()).device
-		order = sorted(range(len(melodies)), key=lambda i: melodies[i].length)
-		logits = [0.0] * len(melodies)
+		inputs = [self.token_ids(m, e) for m, e in zip(melodies, harmonizations, strict=True)]
+		order = sorted(range(len(inputs)), key=lambda i: len(inputs[i]))
+		logits = [0.0] * len(inputs)
 
 		for chunk in batched(order, batch_size, strict=False):
-			items = [critic_inputs(melodies[i], harmonizations[i]) for i in chunk]
-			batch = collate(items, [0.0] * len(items)).to(device)
+			batch = collate([inputs[i] for i in chunk], [0.0] * len(chunk)).to(device)
 
 			for i, logit in zip(chunk, self(batch).float().tolist(), strict=True):
 				logits[i] = logit

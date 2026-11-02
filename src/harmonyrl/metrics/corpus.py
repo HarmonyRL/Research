@@ -1,12 +1,4 @@
-"""All metrics of 1 system over a corpus, against the human accompaniments of the same melodies.
-
-Every harmonization, the human and training ones included, is counted with each chord repeated
-inside a bar held, so that striking a chord again does not count as a new chord. Per-segment
-metrics are averaged over the segments where they are defined; counts are pooled before taking
-rates; distributions are compared with the human ones by Jensen-Shannon distance. A system may
-give several harmonizations of a segment: all of them count toward these, and their disagreement
-measures its diversity.
-"""
+"""All metrics of 1 system over a corpus, against the human accompaniments of the same melodies."""
 
 from collections import Counter
 from collections.abc import Sequence

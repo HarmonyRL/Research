@@ -60,7 +60,7 @@ def main(cfg: DictConfig) -> None:
 		train, valid = _holdout(train + valid, config["holdout_fraction"], config["seed"])
 
 	torch.manual_seed(config["seed"])
-	critic = ChordCritic(CriticConfig(**config["model"]))
+	critic = ChordCritic.from_backbone(CriticConfig(**config["model"]))
 	trainer = CriticTrainer(
 		critic,
 		CriticArguments(output_dir=run_dir, seed=config["seed"], **config["train"]),

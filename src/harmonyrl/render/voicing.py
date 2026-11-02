@@ -1,12 +1,4 @@
-"""Fixed voicing of chord events for audio rendering.
-
-Every system is rendered through these rules, so the voicing never varies between
-experiments. The bass note sits in C1-E2; C-E basses default to the C2-E2 octave
-and drop to C1-E1 only when that lets the remaining voices sit lower. The other
-chord tones form an open voicing above C3: their order is free, and each chord
-takes the placement with the lowest total pitch that keeps every pair of
-simultaneous voices within the low interval limits.
-"""
+"""Fixed voicing of chord events for audio rendering."""
 
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -22,10 +14,7 @@ UPPER_FLOOR = 48
 _UPPER_CEILING = 83
 """Highest candidate note for an upper voice (B5); real placements stay far below."""
 
-# Low interval limits (Gary Lindsay's chart): the lowest note each interval may
-# sit on before it turns muddy. Intervals beyond a major 10th are unrestricted,
-# so is the octave. The 9-semitone row takes the stricter of its two spellings
-# (M6 or diminished 7th) since the voicing carries no spelling.
+# Low interval limits.
 _LOW_LIMIT = {
 	1: 52,
 	2: 51,
@@ -83,26 +72,33 @@ def chord_notes(melody: Melody, events: Sequence[ChordEvent]) -> tuple[VoicedNot
 	"""Deterministic voicing of every chord event over the melody."""
 	position = Fraction(0)
 	notes: list[VoicedNote] = []
+
 	for event in events:
 		if event.chord is not None:
 			key = melody.key_at(position)
 			bass_pc, pitch_classes = chord_pitch_classes(event.chord, key)
+
 			for pitch in _voice_chord(bass_pc, pitch_classes):
 				notes.append(
 					VoicedNote(
 						position, Fraction(event.duration), pitch, CHORD_PROGRAM, CHORD_VELOCITY
 					)
 				)
+
 		position += event.duration
+
 	return tuple(notes)
 
 
 def _voice_chord(bass_pc: int, pitch_classes: frozenset[int]) -> tuple[int, ...]:
 	uppers = tuple(sorted(pitch_classes - {bass_pc}))
+
 	if bass_pc <= 4:
 		high = _voice(bass_pc + 36, uppers)
 		low = _voice(bass_pc + 24, uppers)
+
 		return low if sum(low[1:]) < sum(high[1:]) else high
+
 	return _voice(bass_pc + 24, uppers)
 
 
@@ -111,6 +107,7 @@ def _voice(bass: int, uppers: tuple[int, ...]) -> tuple[int, ...]:
 	"""The lowest open voicing of `uppers` above `bass` that respects the limits."""
 	candidates = [range(UPPER_FLOOR + pc, _UPPER_CEILING + 1, 12) for pc in uppers]
 	best: tuple[int, ...] | None = None
+
 	for combo in product(*candidates):
 		notes = (bass, *combo)
 		if all(
@@ -118,6 +115,8 @@ def _voice(bass: int, uppers: tuple[int, ...]) -> tuple[int, ...]:
 			for lo, hi in combinations(notes, 2)
 		) and (best is None or (sum(combo), combo) < (sum(best), best)):
 			best = combo
+
 	if best is None:
 		raise ValueError(f"no voicing within the low interval limits for bass {bass}, {uppers}")
+
 	return (bass, *best)

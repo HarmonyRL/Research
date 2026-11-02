@@ -93,21 +93,21 @@ class Split(StrEnum):
 
 @dataclass(frozen=True)
 class Melody:
-	"""Everything a model reads: a monophonic melody, its meter, local keys, and section.
-
-	`keys` starts at position 0 and each span holds until the next. `section` is None when unknown.
-	`length` is in 8th notes and covers every note.
-	"""
+	"""Everything a model reads: a monophonic melody, its meter, local keys, section, and tempo."""
 
 	notes: tuple[Note, ...]
 	meter: Meter
 	keys: tuple[KeySpan, ...]
 	section: Section | None
+	tempo: int | None
 	length: int
 
 	def __post_init__(self) -> None:
 		if self.length < 1:
 			raise ValueError(f"length must be positive, got {self.length}")
+
+		if self.tempo is not None and self.tempo < 1:
+			raise ValueError(f"tempo must be positive, got {self.tempo}")
 
 		starts = [span.start for span in self.keys]
 		if not starts or starts[0] != 0:

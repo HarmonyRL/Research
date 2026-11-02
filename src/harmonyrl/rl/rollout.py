@@ -18,13 +18,7 @@ from harmonyrl.schema import ChordEvent, Segment
 
 @dataclass(frozen=True)
 class Rollout:
-	"""1 sampled harmonization per segment, and what was computed from it.
-
-	`samples` keep the id, split, and melody of their segments. `batch` holds their targets
-	under the masks they were sampled under. `log_prob` and `reference_log_prob` are log π
-	of each event (segments, events) under the policy and the reference, 0 on padded events,
-	and `rewards` (segments,) are their rewards. Tensors are on the policy's device.
-	"""
+	"""1 sampled harmonization per segment, and what was computed from it."""
 
 	samples: tuple[Segment, ...]
 	batch: Batch
@@ -34,11 +28,7 @@ class Rollout:
 
 
 def policy_from_reference(reference: ChordPolicy) -> ChordPolicy:
-	"""The policy RL starts from: `reference` without dropout, keeping no chord to a pickup.
-
-	Without dropout, log π of an action is the same at every forward pass, so the log π of a
-	rollout is the one its gradient step sees.
-	"""
+	"""The policy RL starts from: `reference` without dropout, keeping no chord to a pickup."""
 	policy = ChordPolicy(replace(reference.config, dropout=0.0, restrict_no_chord=True))
 	policy.load_state_dict(reference.state_dict())
 
@@ -54,12 +44,7 @@ def rollout(
 	*,
 	generator: torch.Generator | None = None,
 ) -> Rollout:
-	"""Sample each melody of `segments` from `policy` at temperature 1 and score the samples.
-
-	`reward` maps the samples and `segments` to 1 reward per sample. The reference is evaluated
-	under the masks of the policy, so both log π are over the same actions. Both policies should
-	be in eval mode and on 1 device.
-	"""
+	"""Sample each melody of `segments` from `policy` at temperature 1 and score the samples."""
 	if not policy.config.restrict_no_chord:
 		raise ValueError("the policy must restrict no chord")
 
@@ -83,12 +68,7 @@ def rollout(
 
 
 def rollout_stats(rollout: Rollout) -> dict[str, float]:
-	"""Means over the samples of `rollout`, for watching training.
-
-	`kl` sums log π - log π_ref over the events of a sample, `nll` is -log π per event,
-	and `no_chord` the share of 8th notes under no chord. `longest_hold` is the longest run of
-	1 chord, in bars, and `longest_alternation` the most events in a row that swing between 2 chords
-	(0 when none do)."""
+	"""Means over the samples of `rollout`, for watching training."""
 	mask = rollout.batch.event_mask
 	samples = rollout.samples
 	no_chord = sum(e.duration for s in samples for e in s.events if e.chord is None)

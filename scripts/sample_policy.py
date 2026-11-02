@@ -1,7 +1,6 @@
 """Sample a harmonization of every melody in some data splits from a chord policy."""
 
 import json
-import shutil
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -59,10 +58,6 @@ def main(cfg: DictConfig) -> None:
 			[Segment(s.id, s.split, s.melody, e) for s, e in zip(segments, samples, strict=True)],
 			run_dir / f"segments_{split.value}.jsonl",
 		)
-
-	tempos = data_dir / "tempos.json"
-	if tempos.exists():
-		shutil.copy(tempos, run_dir / "tempos.json")
 
 	meta["finished"] = datetime.now(ZoneInfo("Asia/Seoul")).isoformat(timespec="seconds")
 	_write_json(run_dir / "meta.json", meta)

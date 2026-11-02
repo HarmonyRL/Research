@@ -53,13 +53,7 @@ def viterbi(
 	log_priors: Sequence[np.ndarray],
 	log_transitions: Sequence[np.ndarray | None],
 ) -> list[int]:
-	"""Index of the label of each slot on the most likely path.
-
-	Slot s has its own labels, scored by `emissions[s]`. `log_transitions[s]`
-	(labels of s - 1, labels of s) links it to the slot before.
-	Where it is None, slot s starts afresh from `log_priors[s]` after the best path so far,
-	as the 1st slot must.
-	"""
+	"""Index of the label of each slot on the most likely path."""
 	if log_transitions and log_transitions[0] is not None:
 		raise ValueError("the 1st slot has no slot before it to transition from")
 

@@ -24,12 +24,7 @@ def melodies_from_pdf(
 	meter: Meter | None = None,
 	key: Key | None = None,
 ) -> list[ImportedMelody]:
-	"""Recognize melodies from every page of a PDF score.
-
-	Each page is rasterized and recognized independently (homr takes one image
-	at a time); page order is preserved. A page where recognition fails raises
-	`ImportedPageError` naming the page — the melodies from pages that
-	succeeded stay available on the error, since OMR is approximate by nature."""
+	"""Recognize melodies from every page of a PDF score."""
 	with tempfile.TemporaryDirectory() as tmp:
 		work = Path(tmp)
 		prefix = work / "page"
@@ -42,8 +37,6 @@ def melodies_from_pdf(
 		if not pages:
 			raise RuntimeError(f"pdftoppm produced no pages from {path}")
 
-		# GPU model variants (fp16) require a separate download and CUDA 12.1;
-		# the CPU models run in ~6-10 s/page and are what the CLI downloads by default.
 		config = ProcessingConfig(
 			enable_debug=False,
 			enable_cache=False,
@@ -56,21 +49,25 @@ def melodies_from_pdf(
 		)
 		results: list[ImportedMelody] = []
 		failures: list[tuple[int, Exception]] = []
+
 		for index, page in enumerate(pages, start=1):
 			try:
 				process_image(str(page), config, XmlGeneratorArguments())
 				musicxml = page.with_suffix(".musicxml")
 				if not musicxml.exists():
 					raise RuntimeError(f"homr produced no MusicXML for page {index}")
+
 				results.append(melody_from_musicxml(musicxml, part=part, meter=meter, key=key))
 			except Exception as error:
 				failures.append((index, error))
+
 	if failures:
 		raise ImportedPageError(
 			f"OMR failed on page(s) {[index for index, _ in failures]} of {path}",
 			results,
 			failures,
 		)
+
 	return results
 
 

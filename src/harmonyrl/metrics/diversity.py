@@ -35,11 +35,7 @@ def copy_lengths(
 	train: Sequence[tuple[Melody, Sequence[ChordEvent]]],
 	harmonizations: Sequence[tuple[Melody, Sequence[ChordEvent]]],
 ) -> list[int]:
-	"""Per harmonization, its longest run of events that also occurs in 1 training harmonization.
-
-	Events match on projected chord and duration. Lengths grow 1 event at a time, so only the
-	training runs of the current length are held.
-	"""
+	"""Per harmonization, its longest run of events that also occurs in 1 training harmonization."""
 	vocabulary: dict[tuple, int] = {}
 
 	def tokens(melody: Melody, events: Sequence[ChordEvent]) -> list[int]:

@@ -1,7 +1,7 @@
 """Filtering joined items and converting them into contract Segments."""
 
 from collections import Counter
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from fractions import Fraction
 from math import ceil, floor
@@ -103,21 +103,6 @@ def usable_ids(
 	return ids, both_present, meter_change
 
 
-def tempos_by_id(raw: Mapping[str, Mapping[str, Any]], ids: Iterable[str]) -> dict[str, int]:
-	"""First recorded tempo in bpm per item, skipping items without a usable value.
-
-	Rendering plays each segment at its source tempo; items with no tempo (or 0) fall
-	back to a fixed default at render time.
-	"""
-	tempos: dict[str, int] = {}
-	for sid in ids:
-		entries = (raw[sid].get("json") or {}).get("tempos") or []
-		bpm = entries[0].get("bpm") if entries else None
-		if isinstance(bpm, int) and bpm > 0:
-			tempos[sid] = bpm
-	return tempos
-
-
 def _usable(simple_item: Mapping[str, Any]) -> bool:
 	annotations = simple_item["annotations"]
 	return bool(annotations["melody"]) and bool(annotations["harmony"])
@@ -214,6 +199,13 @@ def _events(
 	return [ChordEvent(chord, duration) for chord, duration in events]
 
 
+def _tempo(raw_item: Mapping[str, Any]) -> int | None:
+	"""The first recorded tempo of an item, or None when it has none or records 0."""
+	entries = (raw_item.get("json") or {}).get("tempos") or []
+	bpm = entries[0].get("bpm") if entries else None
+	return bpm if isinstance(bpm, int) and bpm > 0 else None
+
+
 def _key_spans(
 	simple_item: Mapping[str, Any],
 	meter: Meter,
@@ -288,6 +280,7 @@ def _convert_item(
 		meter=meter,
 		keys=_key_spans(simple_item, meter, length, report),
 		section=section_from_label(raw_item["json_api"].get("section") or ""),
+		tempo=_tempo(raw_item),
 		length=length,
 	)
 	return Segment(

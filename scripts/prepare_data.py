@@ -17,7 +17,6 @@ from harmonyrl.data import (
 	alignment_report,
 	load_json_gz,
 	prepare_dataset,
-	tempos_by_id,
 	write_segments,
 )
 from harmonyrl.schema import Segment, Split, project
@@ -43,11 +42,6 @@ def main(cfg: DictConfig) -> None:
 		by_split[segment.split].append(segment)
 	for split, group in by_split.items():
 		write_segments(group, output_dir / f"segments_{split.value}.jsonl")
-
-	tempos = tempos_by_id(raw, (segment.id for segment in segments))
-	(output_dir / "tempos.json").write_text(
-		json.dumps(tempos, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-	)
 
 	meta = {
 		"git": _git_hash(),
@@ -83,7 +77,10 @@ def main(cfg: DictConfig) -> None:
 			"key_spans_dropped_at_end": report.key_spans_dropped_at_end,
 		},
 		"projection": _projection(segments),
-		"tempos": {"with_tempo": len(tempos), "fallback": len(segments) - len(tempos)},
+		"tempos": {
+			"known": sum(s.melody.tempo is not None for s in segments),
+			"unknown": sum(s.melody.tempo is None for s in segments),
+		},
 	}
 	(output_dir / "meta.json").write_text(
 		json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"

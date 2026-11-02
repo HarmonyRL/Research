@@ -30,6 +30,7 @@ from ..features import (
 	MODES,
 	OCTAVES,
 	SECTIONS,
+	TEMPO_BUCKETS,
 	EventTargets,
 	melody_features,
 )
@@ -107,6 +108,7 @@ class ChordPolicy(nn.Module, StrictModelHubMixin, license="cc-by-nc-sa-3.0"):
 				"beats_per_bar": nn.Embedding(MAX_BEATS_PER_BAR + 1, dim),
 				"beat_unit": nn.Embedding(2, dim),
 				"section": nn.Embedding(len(SECTIONS) + 1, dim),
+				"tempo": nn.Embedding(TEMPO_BUCKETS + 1, dim),
 			}
 		)
 		self.encoder = nn.ModuleList(
@@ -158,11 +160,8 @@ class ChordPolicy(nn.Module, StrictModelHubMixin, license="cc-by-nc-sa-3.0"):
 		values: torch.Tensor,
 		event_mask: torch.Tensor,
 	) -> torch.Tensor:
-		"""Decoder states (batch, events, dim) of events at `starts`, each seeing the ones before.
-
-		`values` (batch, events, heads) indexes `HEAD_VALUES`, with IGNORE for a head not predicted.
-		The state of an event reads only the values of the events before it.
-		"""
+		"""Decoder states (batch, events, dim) of events at `starts`,
+		each seeing the ones before."""
 		size, events, _ = values.shape
 
 		# A head that is not predicted, and every head before the 1st event, gets its own value.
@@ -232,13 +231,7 @@ class ChordPolicy(nn.Module, StrictModelHubMixin, license="cc-by-nc-sa-3.0"):
 		generator: torch.Generator | None = None,
 		batch_size: int | None = None,
 	) -> list[tuple[ChordEvent, ...]]:
-		"""Chord events for each of `melodies`, chosen head by head under the action masks.
-
-		With `greedy`, each head takes its most likely value; otherwise it is sampled
-		from its logits divided by `temperature`, drawing from `generator`.
-		With `batch_size`, melodies of similar length are generated that many at a time.
-		The policy should be run in eval mode.
-		"""
+		"""Chord events for each of `melodies`, chosen head by head under the action masks."""
 		if temperature <= 0:
 			raise ValueError(f"temperature must be positive, got {temperature}")
 

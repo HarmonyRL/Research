@@ -1,11 +1,4 @@
-"""Idiom statistics: non-chord tones on strong beats and how they resolve, and chord kinds.
-
-Counts add up over segments, and `idiom_rates` turns the totals into percentages. A note is judged
-against the chord at its onset, and notes under no chord are left out of the non-chord tones. A
-long non-chord tone starts on a strong beat (a beat strength of 2 or more) and lasts at least 1
-beat; it resolves when the next note lies within 2 semitones and is a tone of the chord at its
-onset. Chord kinds count events.
-"""
+"""Idiom statistics: non-chord tones on strong beats and how they resolve, and chord kinds."""
 
 from collections import Counter
 from collections.abc import Mapping, Sequence
@@ -43,12 +36,15 @@ def idiom_counts(
 	for i, (note, pitch_classes) in enumerate(zip(melody.notes, tones, strict=True)):
 		if not pitch_classes:
 			continue
+
 		counts["notes_under_chord"] += 1
 		if note.pitch % 12 in pitch_classes:
 			continue
+
 		counts["non_chord_tones"] += 1
 		if not _is_long_on_strong_beat(note, melody):
 			continue
+
 		counts["long_non_chord_tones"] += 1
 		if i + 1 < len(melody.notes):
 			following = melody.notes[i + 1]
@@ -81,5 +77,6 @@ def idiom_rates(counts: Mapping[str, int]) -> dict[str, float | None]:
 def _is_long_on_strong_beat(note: Note, melody: Melody) -> bool:
 	if note.onset.denominator != 1:
 		return False
+
 	strong = melody.meter.beat_strength(int(note.onset)) >= 2
 	return strong and note.duration >= melody.meter.eighths_per_beat

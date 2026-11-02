@@ -1,10 +1,4 @@
-"""The 6 metrics of Yeh et al. (2021), "Automatic melody harmonization with triad chords".
-
-Chord labels are chords projected onto the model vocabulary, in the role of the paper's labels on
-melodies transposed to C. The paper places 1 triad per half bar; here events have any length and
-size, so the histogram counts 8th-note frames, CTD compares consecutive events, and PCS averages
-over every chord tone. Notes and windows under no chord are left out.
-"""
+"""The 6 metrics of Yeh et al. (2021), "Automatic melody harmonization with triad chords"."""
 
 from collections import Counter
 from collections.abc import Sequence

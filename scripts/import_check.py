@@ -42,7 +42,7 @@ def main(
 
 	for segment in picked:
 		base = WORKDIR / segment.id
-		write_midi(segment.melody, segment.events, base.with_suffix(".mid"), 120)
+		write_midi(segment.melody, segment.events, base.with_suffix(".mid"))
 		write_score(melody_to_score(segment.melody, segment.events), base.with_suffix(".musicxml"))
 		musicxml_to_formats(base.with_suffix(".musicxml"), [base.with_suffix(".mscz")], MSCORE)
 		mscx_dir = WORKDIR / f"{segment.id}.mscx.d"
@@ -79,12 +79,15 @@ def main(
 
 
 def _compare(original: Melody, imported: Melody) -> tuple[list[str], bool]:
-	"""Hard issues (notes, meter, length) and whether the key mode landed on the
+	"""Hard issues (notes, meter, tempo, length) and whether the key mode landed on the
 	expected key rather than its parallel partner."""
 	issues: list[str] = []
 
 	if imported.meter != original.meter:
 		issues.append(f"meter {imported.meter} != {original.meter}")
+
+	if original.tempo is not None and imported.tempo != original.tempo:
+		issues.append(f"tempo {imported.tempo} != {original.tempo}")
 
 	# The importer recovers length as the end of the last note's bar, so the
 	# expected value is the original normalized to the same rule.

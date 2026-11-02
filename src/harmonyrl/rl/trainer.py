@@ -1,14 +1,4 @@
-"""KL-regularized fine-tuning toward the target π_ref · exp(R / β) / Z.
-
-Each update samples k harmonizations y of each melody in a batch and takes 1 gradient step on
--Σ w log π(y), with log π summed over the events of y. The weights w set the direction of the
-KL. Both directions start from s = R / β + log π_ref(y) - log π(y), the log ratio of the
-unnormalized target to the policy. The reverse KL weight is β (s - the mean s of the other
-samples of the melody), RLOO: the score function gradient of KL(π || target) with a leave-one-out
-baseline. The forward KL weight is softmax(s) over the samples of the melody, on-policy DPG: the
-gradient of KL(target || π) by self-normalized importance sampling, which estimates Z per melody
-and so is biased for small k. β stays fixed, since changing it would move the target.
-"""
+"""KL-regularized fine-tuning toward the target π_ref · exp(R / β) / Z."""
 
 import json
 import logging
@@ -35,15 +25,7 @@ _REWARDS = ("critic", "local")
 
 @dataclass(frozen=True)
 class RLArguments:
-	"""Settings of `RLTrainer`.
-
-	Each of `updates` draws `melodies` training segments, samples `samples` harmonizations of
-	each, and takes 1 gradient step. `divergence` is the KL direction, "reverse" or "forward".
-	`reward` is "critic", the critic logit clipped to `clip_reward`, or "local", the per-note
-	reward of RL-Chord against the human harmonization. Every `eval_every` updates, `samples`
-	harmonizations of a fixed set of `eval_melodies` validation segments are drawn
-	with a fixed seed and scored, and every `save_every` updates the policy is saved.
-	"""
+	"""Settings of `RLTrainer`."""
 
 	output_dir: str | Path
 	seed: int = 0
@@ -75,11 +57,7 @@ def reverse_weights(s: torch.Tensor, beta: float) -> torch.Tensor:
 
 
 def forward_weights(s: torch.Tensor) -> torch.Tensor:
-	"""DPG weights (melodies, samples): softmax(s) over the samples of each melody, times k.
-
-	The factor k makes the mean over all samples, like that of the reverse weights, average the
-	per-melody estimates.
-	"""
+	"""DPG weights (melodies, samples): softmax(s) over the samples of each melody, times k."""
 	return s.softmax(dim=1) * s.shape[1]
 
 
@@ -93,12 +71,7 @@ def effective_fraction(s: torch.Tensor) -> torch.Tensor:
 
 
 class RLTrainer:
-	"""Fine-tuning of a policy against a fixed reward, shaped like `transformers.Trainer`.
-
-	`critic` is needed only for the critic reward. `train` writes the metrics of each update to
-	`metrics.jsonl` and the policy to `update-N/` every `save_every` updates and to `final/` in
-	`args.output_dir`. The reference and the critic are never trained.
-	"""
+	"""Fine-tuning of a policy against a fixed reward, shaped like `transformers.Trainer`."""
 
 	def __init__(
 		self,

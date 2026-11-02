@@ -24,12 +24,6 @@ _logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class PretrainArguments:
 	"""Settings of `PolicyTrainer`, as `transformers.TrainingArguments` for the options used here.
-
-	Batches hold at most `max_frames` padded frames. The learning rate rises linearly over
-	`warmup_steps`, then follows a cosine to 0 at the end of `max_epochs`. Training stops once
-	the validation NLL per event has not improved for `patience` epochs. `section_dropout` is the
-	share of training segments whose section is replaced by unknown, as melodies from outside
-	the dataset have none.
 	"""
 
 	output_dir: str | Path
@@ -42,14 +36,11 @@ class PretrainArguments:
 	patience: int = 5
 	grad_clip: float = 1.0
 	section_dropout: float = 0.2
+	tempo_dropout: float = 0.2
 
 
 class PolicyTrainer:
-	"""Teacher-forced training of a `ChordPolicy`, shaped like `transformers.Trainer`.
-
-	`train` writes the metrics of each epoch to `metrics.jsonl` and the policy with the lowest
-	validation NLL per event to `best/` in `args.output_dir`, and ends with those weights loaded.
-	"""
+	"""Teacher-forced training of a `ChordPolicy`, shaped like `transformers.Trainer`."""
 
 	def __init__(
 		self,
@@ -110,8 +101,12 @@ class PolicyTrainer:
 
 			for indices in length_batches(lengths, args.max_frames, self._rng):
 				batch = collate([self._train[i] for i in indices]).to(self.device)
-				dropped = torch.rand(batch.section.shape, device=self.device) < args.section_dropout
-				batch = replace(batch, section=batch.section.masked_fill(dropped, 0))
+				drops = torch.rand(2, len(indices), device=self.device)
+				batch = replace(
+					batch,
+					section=batch.section.masked_fill(drops[0] < args.section_dropout, 0),
+					tempo=batch.tempo.masked_fill(drops[1] < args.tempo_dropout, 0),
+				)
 
 				with torch.autocast(self.device.type, dtype=torch.bfloat16):
 					log_prob = policy(batch).log_prob[batch.event_mask]

@@ -10,12 +10,7 @@ from harmonyrl.schema import ChordEvent, Key, Melody, RawChord, chord_pitch_clas
 
 @dataclass(frozen=True)
 class ChordSpan:
-	"""A chord event from `start` to `end` in 8th notes.
-
-	`chord` is in `key`, the key at `start`, projected onto the model vocabulary unless
-	`chord_spans` was told not to, and None for no chord. `bass` and `pitch_classes` are absolute,
-	and None and empty for no chord.
-	"""
+	"""A chord event from `start` to `end` in 8th notes."""
 
 	start: int
 	end: int
@@ -40,6 +35,7 @@ def chord_spans(
 	start = 0
 	for event in events:
 		key = melody.key_at(start)
+
 		if event.chord is None:
 			spans.append(ChordSpan(start, start + event.duration, None, key, None, frozenset()))
 		else:

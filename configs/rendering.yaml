@@ -6,7 +6,6 @@ soundfont: /usr/share/sounds/sf2/FluidR3_GM.sf2
 mscore: ~/.local/bin/mscore
 sample_rate: 44100
 gain: 0.5
-default_tempo: 120
 mp3_bitrate: 192k
 segments:
     - data/processed/segments_train.jsonl

@@ -1,9 +1,4 @@
-"""Tonal centroids of Harte, Sandler, and Gasser (2006).
-
-"Detecting harmonic change in musical audio" maps a pitch-class profile to 6 dimensions:
-the circles of fifths, minor thirds, and major thirds with radii 1, 1, and 0.5,
-divided by the L1 norm of the profile.
-"""
+"""Tonal centroids of Harte, Sandler, and Gasser (2006)."""
 
 from collections.abc import Collection
 
@@ -29,6 +24,7 @@ def tonal_centroid(pitch_classes: Collection[int]) -> np.ndarray:
 
 	profile = np.zeros(12)
 	profile[list(pitch_classes)] = 1.0
+
 	return _BASIS @ profile / profile.sum()
 
 

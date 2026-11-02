@@ -44,7 +44,7 @@ def main(cfg: DictConfig) -> None:
 	data_dir = Path(config["data_dir"])
 	segments = read_segments(data_dir / f"segments_{Split(config['split']).value}.jsonl")
 	train = read_segments(data_dir / f"segments_{Split.TRAIN.value}.jsonl")
-	harmonizations = _system(config["systems"])(segments)
+	harmonizations = _system(config["system"])(segments)
 
 	for i in range(len(harmonizations[0])):
 		write_segments(

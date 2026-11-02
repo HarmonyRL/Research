@@ -1,5 +1,6 @@
 """Distances between categorical distributions given as counts."""
 
+import math
 from collections.abc import Hashable, Mapping
 
 import numpy as np
@@ -22,6 +23,6 @@ def js_distance[K: Hashable](a: Mapping[K, float], b: Mapping[K, float]) -> floa
 
 	def divergence(x: np.ndarray) -> float:
 		present = x > 0
-		return float((x[present] * np.log2(x[present] / m[present])).sum())
+		return math.fsum(x[present] * np.log2(x[present] / m[present]))
 
 	return float(np.sqrt(max(0.0, (divergence(p) + divergence(q)) / 2)))

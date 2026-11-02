@@ -1,22 +1,19 @@
-"""Evaluate the harmonizations of 1 system on a data split against the human accompaniments.
+"""Evaluate the harmonizations of 1 system on a data split against the human accompaniments."""
 
-Writes the config, git state, the metrics, and each sample of the harmonizations as segments into a
-new directory named after the system, with the source tempos beside them so that renderings keep
-tempo.
-"""
-
-import argparse
 import json
 import shutil
 import subprocess
 from collections.abc import Callable, Sequence
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
+from zoneinfo import ZoneInfo
 
+import hydra
 import numpy as np
 import torch
-import yaml
+from hydra.core.hydra_config import HydraConfig
+from omegaconf import DictConfig, OmegaConf
 
 from harmonyrl.data import read_segments, write_segments
 from harmonyrl.metrics import evaluate_corpus
@@ -29,29 +26,26 @@ REPO = Path(__file__).resolve().parent.parent
 type Harmonizer = Callable[[Sequence[Segment]], list[list[Sequence[ChordEvent]]]]
 
 
-def main() -> None:
-	parser = argparse.ArgumentParser(description=__doc__)
-	parser.add_argument("system", help="a key of `systems` in the config")
-	parser.add_argument("--config", default="configs/evaluate.yaml", type=Path)
-	args = parser.parse_args()
-
-	config = yaml.safe_load(args.config.read_text(encoding="utf-8"))
-	started = datetime.now(UTC)
-	run_dir = Path(config["run_dir"]) / args.system
-	run_dir.mkdir(parents=True)
+@hydra.main(config_path="../configs", config_name="evaluate")
+def main(cfg: DictConfig) -> None:
+	config = cast(dict[str, Any], OmegaConf.to_container(cfg, resolve=True))
+	started = datetime.now(ZoneInfo("Asia/Seoul"))
+	run_dir = Path(HydraConfig.get().runtime.output_dir)
+	if any(run_dir.iterdir()):
+		raise FileExistsError(f"run directory {run_dir} is not empty")
 
 	meta: dict[str, Any] = {
 		"git": _git("rev-parse", "--short", "HEAD"),
 		"git_dirty": bool(_git("status", "--porcelain")),
 		"started": started.isoformat(timespec="seconds"),
 		"config": config,
-		"system": args.system,
 	}
 
 	data_dir = Path(config["data_dir"])
 	segments = read_segments(data_dir / f"segments_{Split(config['split']).value}.jsonl")
 	train = read_segments(data_dir / f"segments_{Split.TRAIN.value}.jsonl")
-	harmonizations = _system(config["systems"][args.system])(segments)
+	harmonizations = _system(config["systems"])(segments)
+
 	for i in range(len(harmonizations[0])):
 		write_segments(
 			[
@@ -67,7 +61,7 @@ def main() -> None:
 
 	metrics = evaluate_corpus(segments, harmonizations, train)
 	metrics |= _critic_logits(config["critics"], segments, harmonizations)
-	meta["finished"] = datetime.now(UTC).isoformat(timespec="seconds")
+	meta["finished"] = datetime.now(ZoneInfo("Asia/Seoul")).isoformat(timespec="seconds")
 	_write_json(run_dir / "meta.json", meta)
 	_write_json(run_dir / "metrics.json", metrics)
 	print(json.dumps(metrics, indent=2))
@@ -111,11 +105,7 @@ def _generate(
 def _rerank(
 	segments: Sequence[Segment], settings: dict[str, Any]
 ) -> list[list[Sequence[ChordEvent]]]:
-	"""Per sample, 1 of `candidates` new policy samples, chosen by the clipped critic logit.
-
-	With `beta` 0 the best candidate is chosen; otherwise 1 is drawn in proportion to
-	exp(reward / beta), which approximates sampling the target of the RL objective.
-	"""
+	"""Per sample, 1 of `candidates` new policy samples, chosen by the clipped critic logit."""
 	samples, candidates, beta = settings["samples"], settings["candidates"], settings["beta"]
 	if beta < 0:
 		raise ValueError(f"beta must not be negative, got {beta}")

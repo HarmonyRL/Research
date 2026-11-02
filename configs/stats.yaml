@@ -1,5 +1,8 @@
 # Source and output locations for dataset statistics.
+defaults:
+    - hydra_defaults
+    - _self_
 source_dir: ~/projects/sheetsage-data/hooktheory
-raw_file: Hooktheory_Raw.json.gz
 processed_dir: data/processed
 output_dir: runs/stats/baseline
+raw_file: Hooktheory_Raw.json.gz

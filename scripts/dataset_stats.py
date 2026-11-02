@@ -1,24 +1,25 @@
 """Compute baseline dataset statistics.
 
-Two levels of statistics over the prepared segments:
+2 levels of statistics over the prepared segments:
 - melody and chord statistics on the final segments (non-chord tones, chord kinds,
   barline-crossing chords), for the 4/4 subset and for every x/4 meter;
 - grid statistics on the source annotations (chord onsets off the half-bar grid and
   chords lost when quantized to coarser grids), which need exact beat positions.
-
-Writes a stats.json with the configuration and git hash, and prints a summary.
 """
 
-import argparse
 import json
 import subprocess
 from collections import Counter
-from datetime import UTC, datetime
+from datetime import datetime
 from fractions import Fraction
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
+from zoneinfo import ZoneInfo
 
+import hydra
 import yaml
+from hydra.core.hydra_config import HydraConfig
+from omegaconf import DictConfig, OmegaConf
 
 from harmonyrl.data import beat_value, load_json_gz, read_segments
 from harmonyrl.metrics import idiom_counts
@@ -29,12 +30,9 @@ GRIDS = {"half_bar": Fraction(2), "beat": Fraction(1), "eighth": Fraction(1, 2)}
 """Quantization grids in beats, coarser first."""
 
 
-def main() -> None:
-	parser = argparse.ArgumentParser(description=__doc__)
-	parser.add_argument("--config", default="configs/stats.yaml", type=Path)
-	args = parser.parse_args()
-
-	config = yaml.safe_load(args.config.read_text(encoding="utf-8"))
+@hydra.main(config_path="../configs", config_name="stats")
+def main(cfg: DictConfig) -> None:
+	config = cast(dict[str, Any], OmegaConf.to_container(cfg, resolve=True))
 	processed = Path(config["processed_dir"])
 	segments = [
 		segment
@@ -48,7 +46,7 @@ def main() -> None:
 
 	stats: dict[str, Any] = {
 		"git": _git_hash(),
-		"timestamp": datetime.now(UTC).isoformat(timespec="seconds"),
+		"timestamp": datetime.now(ZoneInfo("Asia/Seoul")).isoformat(timespec="seconds"),
 		"config": config,
 		"counts": {"segments": len(segments), "four4": len(four4), "x4": len(x4)},
 		"grid": _grid_stats(config, [s.id for s in four4]),
@@ -59,9 +57,7 @@ def main() -> None:
 		},
 	}
 
-	output = Path(config["output_dir"])
-	output.mkdir(parents=True, exist_ok=True)
-	(output / "stats.json").write_text(
+	(Path(HydraConfig.get().runtime.output_dir) / "stats.json").write_text(
 		json.dumps(stats, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
 	)
 	print(yaml.safe_dump(_summary(stats), sort_keys=False, allow_unicode=True))

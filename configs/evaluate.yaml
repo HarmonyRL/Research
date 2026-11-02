@@ -1,53 +1,12 @@
-# Evaluation of each system on 1 split. `systems` maps a name to its kind and what it needs to load;
-# `samples` is the number of harmonizations per melody. Each critic of `critics` reports its mean
-# logit over all harmonizations. `rerank` picks among `candidates` samples of `model` by the
-# critic reward clipped to `clip_reward`: the best with `beta` 0, else in proportion to
-# exp(reward / beta). `restrict_no_chord` decodes with no chord kept to a pickup, as RL policies do.
+# Evaluation of 1 system on 1 split against the human accompaniments.
+defaults:
+    - hydra_defaults
+    - system: ???
+    - _self_
 data_dir: data/processed
-run_dir: runs/eval
-split: test
+split: valid
+name: ???
+output_dir: runs/eval-${split}/${name}
 critics:
     critic: runs/critic/main/best
     holdout: runs/critic/holdout/best
-systems:
-    human:
-        kind: human
-    hmm:
-        kind: hmm
-        model: runs/hmm/base/model
-    pi_ref_greedy:
-        kind: policy
-        model: runs/pretrain/final/best
-        restrict_no_chord: true
-        greedy: true
-        batch_size: 64
-    pi_ref_sample:
-        kind: policy
-        model: runs/pretrain/final/best
-        restrict_no_chord: true
-        temperature: 1.0
-        samples: 8
-        seed: 0
-        batch_size: 64
-    pi_ref_best_of_8:
-        kind: rerank
-        model: runs/pretrain/final/best
-        restrict_no_chord: true
-        critic: runs/critic/main/best
-        candidates: 8
-        beta: 0.0
-        clip_reward: 2.0
-        samples: 8
-        seed: 0
-        batch_size: 64
-    pi_ref_sir_beta0.1:
-        kind: rerank
-        model: runs/pretrain/final/best
-        restrict_no_chord: true
-        critic: runs/critic/main/best
-        candidates: 8
-        beta: 0.1
-        clip_reward: 2.0
-        samples: 8
-        seed: 0
-        batch_size: 64

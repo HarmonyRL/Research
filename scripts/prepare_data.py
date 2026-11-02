@@ -1,18 +1,17 @@
-"""Prepare the contract dataset from the two source files.
+"""Prepare the contract dataset from the two source files."""
 
-Reads the simplified and raw Hooktheory files, converts them into Segments, and writes
-one JSONL file per split plus a meta.json with every count the pipeline produced.
-"""
-
-import argparse
 import json
 import subprocess
-from datetime import UTC, datetime
+from datetime import datetime
 from fractions import Fraction
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
+from zoneinfo import ZoneInfo
 
+import hydra
 import yaml
+from hydra.core.hydra_config import HydraConfig
+from omegaconf import DictConfig, OmegaConf
 
 from harmonyrl.data import (
 	alignment_report,
@@ -26,15 +25,11 @@ from harmonyrl.schema import Segment, Split, project
 REPO = Path(__file__).resolve().parent.parent
 
 
-def main() -> None:
-	parser = argparse.ArgumentParser(description=__doc__)
-	parser.add_argument("--config", default="configs/prepare_data.yaml", type=Path)
-	args = parser.parse_args()
-
-	config = yaml.safe_load(args.config.read_text(encoding="utf-8"))
+@hydra.main(config_path="../configs", config_name="prepare_data")
+def main(cfg: DictConfig) -> None:
+	config = cast(dict[str, Any], OmegaConf.to_container(cfg, resolve=True))
 	source_dir = Path(config["source_dir"]).expanduser()
-	output_dir = Path(config["output_dir"])
-	output_dir.mkdir(parents=True, exist_ok=True)
+	output_dir = Path(HydraConfig.get().runtime.output_dir)
 
 	simple = load_json_gz(source_dir / config["simplified_file"])
 	raw = load_json_gz(source_dir / config["raw_file"])
@@ -56,7 +51,7 @@ def main() -> None:
 
 	meta = {
 		"git": _git_hash(),
-		"timestamp": datetime.now(UTC).isoformat(timespec="seconds"),
+		"timestamp": datetime.now(ZoneInfo("Asia/Seoul")).isoformat(timespec="seconds"),
 		"config": config,
 		"filtering": {
 			"total": report.total,

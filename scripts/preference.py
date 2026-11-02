@@ -3,19 +3,23 @@
 Usage: streamlit run scripts/preference.py -- --pairs pairs.csv --results results.csv
 """
 
-import argparse
 from pathlib import Path
+from typing import Annotated
+
+import typer
 
 from harmonyrl.tools import run_preference
 
 
-def main() -> None:
-	parser = argparse.ArgumentParser(description=__doc__)
-	parser.add_argument("--pairs", type=Path, required=True)
-	parser.add_argument("--results", type=Path, required=True)
-	args = parser.parse_args()
-	run_preference(args.pairs, args.results)
+def main(
+	pairs: Annotated[Path, typer.Option()],
+	results: Annotated[Path, typer.Option()],
+) -> None:
+	"""Show the pairs of `pairs` and append each choice to `results`."""
+	run_preference(pairs, results)
 
 
 if __name__ == "__main__":
-	main()
+	app = typer.Typer(add_completion=False)
+	app.command()(main)
+	app(standalone_mode=False)

@@ -1,0 +1,3 @@
+# The HMM baseline.
+kind: hmm
+model: runs/hmm/base/model

@@ -1,10 +1,12 @@
 # KL-regularized fine-tuning of π_ref against the structure critic or RL-Chord's local reward.
-# `train` holds RLArguments fields. `beta` and `clip_reward` are provisional until the
-# experiments.
+defaults:
+    - hydra_defaults
+    - _self_
+name: ${now:%Y%m%d-%H%M%S}
 data_dir: data/processed
+output_dir: runs/rl/${name}
 reference: runs/pretrain/final/best
 critic: runs/critic/main/best
-run_dir: runs/rl
 seed: 0
 train:
     divergence: reverse

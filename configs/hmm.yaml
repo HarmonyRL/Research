@@ -1,6 +1,10 @@
-# HMM baseline after Yeh et al. (2021). `model` holds HMMConfig fields; beta is the paper's value.
+# The HMM baseline.
+defaults:
+    - hydra_defaults
+    - _self_
+name: ${now:%Y%m%d-%H%M%S}
 data_dir: data/processed
-run_dir: runs/hmm
+output_dir: runs/hmm/${name}
 model:
     min_count: 20
     beta: 0.08

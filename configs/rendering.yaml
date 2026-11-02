@@ -1,9 +1,20 @@
-# Tool paths and output options for rendering. The fixed voicing, instruments, and
-# tempo handling live in src/harmonyrl/render and are shared by every system.
+# Tool paths and output options for rendering.
+defaults:
+    - hydra_defaults
+    - _self_
 soundfont: /usr/share/sounds/sf2/FluidR3_GM.sf2
 mscore: ~/.local/bin/mscore
-output_root: runs/render
 sample_rate: 44100
 gain: 0.5
 default_tempo: 120
 mp3_bitrate: 192k
+segments:
+    - data/processed/segments_train.jsonl
+    - data/processed/segments_valid.jsonl
+    - data/processed/segments_test.jsonl
+ids: null
+sample: null
+seed: null
+formats: [midi, wav, musicxml, pdf]
+name: ???
+output_dir: runs/render/${name}

@@ -1,18 +1,18 @@
-"""Fine-tune the pretrained policy against the fixed structure critic or the local reward, with a
-KL to it.
-
-Writes the config, git state, per-update metrics, and policy checkpoints into a new run directory.
+"""Fine-tune the pretrained policy against the fixed structure critic or the local reward,
+with a KL to it.
 """
 
-import argparse
 import json
 import logging
 import subprocess
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
+from zoneinfo import ZoneInfo
 
-import yaml
+import hydra
+from hydra.core.hydra_config import HydraConfig
+from omegaconf import DictConfig, OmegaConf
 
 from harmonyrl.data import read_segments
 from harmonyrl.models import ChordCritic, ChordPolicy
@@ -22,17 +22,15 @@ from harmonyrl.schema import Split
 REPO = Path(__file__).resolve().parent.parent
 
 
-def main() -> None:
-	parser = argparse.ArgumentParser(description=__doc__)
-	parser.add_argument("--config", default="configs/train_rl.yaml", type=Path)
-	parser.add_argument("--name", help="run directory name, the start time by default")
-	args = parser.parse_args()
+@hydra.main(config_path="../configs", config_name="train_rl")
+def main(cfg: DictConfig) -> None:
 	logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-	config = yaml.safe_load(args.config.read_text(encoding="utf-8"))
-	started = datetime.now(UTC)
-	run_dir = Path(config["run_dir"]) / (args.name or started.strftime("%Y%m%d-%H%M%S"))
-	run_dir.mkdir(parents=True)
+	config = cast(dict[str, Any], OmegaConf.to_container(cfg, resolve=True))
+	started = datetime.now(ZoneInfo("Asia/Seoul"))
+	run_dir = Path(HydraConfig.get().runtime.output_dir)
+	if any(run_dir.iterdir()):
+		raise FileExistsError(f"run directory {run_dir} is not empty")
 
 	meta: dict[str, Any] = {
 		"git": _git("rev-parse", "--short", "HEAD"),
@@ -62,7 +60,7 @@ def main() -> None:
 	)
 
 	last = trainer.train()
-	meta["finished"] = datetime.now(UTC).isoformat(timespec="seconds")
+	meta["finished"] = datetime.now(ZoneInfo("Asia/Seoul")).isoformat(timespec="seconds")
 	meta["last"] = last
 	_write_json(run_dir / "meta.json", meta)
 

@@ -1,20 +1,17 @@
-"""Render segments to MIDI, WAV, and score formats with the fixed voicing.
+"""Render segments to MIDI, WAV, and score formats with the fixed voicing."""
 
-Selects segments from JSONL files by ID or by seeded random sample and writes the
-requested formats under runs/render/<name>/, plus a manifest with the configuration,
-git hash, and the tempo used per segment.
-"""
-
-import argparse
 import json
 import random
 import subprocess
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
+from zoneinfo import ZoneInfo
 
-import yaml
+import hydra
+from hydra.core.hydra_config import HydraConfig
+from omegaconf import DictConfig, OmegaConf
 
 from harmonyrl.data import read_segments
 from harmonyrl.render import (
@@ -33,38 +30,24 @@ _SUPPORTED_FORMATS = frozenset({"midi", "wav", "mp3", "musicxml", "pdf", "png", 
 _SCORE_FORMATS = frozenset({"musicxml", "pdf", "png", "mscz", "mscx"})
 
 
-def main() -> None:
-	parser = argparse.ArgumentParser(description=__doc__)
-	parser.add_argument("--config", default="configs/rendering.yaml", type=Path)
-	parser.add_argument(
-		"--segments",
-		nargs="+",
-		default=[
-			Path(f"data/processed/segments_{split}.jsonl") for split in ("train", "valid", "test")
-		],
-		type=Path,
-	)
-	parser.add_argument("--ids", help="comma-separated segment IDs")
-	parser.add_argument("--sample", type=int, help="random sample size (requires --seed)")
-	parser.add_argument("--seed", type=int)
-	parser.add_argument("--formats", default="midi,wav,musicxml,pdf", help="comma-separated")
-	parser.add_argument("--name", required=True, help="output directory name under output_root")
-	args = parser.parse_args()
-
-	config = yaml.safe_load(args.config.read_text(encoding="utf-8"))
-	formats = args.formats.split(",")
+@hydra.main(config_path="../configs", config_name="rendering")
+def main(cfg: DictConfig) -> None:
+	config = cast(dict[str, Any], OmegaConf.to_container(cfg, resolve=True))
+	formats = config["formats"]
 	unsupported = set(formats) - _SUPPORTED_FORMATS
 	if unsupported:
-		parser.error(f"unknown formats: {sorted(unsupported)}")
+		raise ValueError(f"unknown formats: {sorted(unsupported)}")
 
-	segments = [segment for path in args.segments for segment in read_segments(path)]
-	selected = _select_segments(parser, segments, ids=args.ids, sample=args.sample, seed=args.seed)
+	paths = [Path(path) for path in config["segments"]]
+	segments = [segment for path in paths for segment in read_segments(path)]
+	selected = _select_segments(
+		segments, ids=config["ids"], sample=config["sample"], seed=config["seed"]
+	)
 
-	output = Path(config["output_root"]) / args.name
-	output.mkdir(parents=True, exist_ok=True)
-	tempos = _load_tempos(args.segments)
-
+	output = Path(HydraConfig.get().runtime.output_dir)
+	tempos = _load_tempos(paths)
 	rendered: dict[str, int] = {}
+
 	for segment in selected:
 		tempo = tempos.get(segment.id, config.get("default_tempo", DEFAULT_TEMPO))
 		_render_segment(segment, output=output, formats=formats, tempo=tempo, config=config)
@@ -72,11 +55,8 @@ def main() -> None:
 
 	manifest = {
 		"git": _git_hash(),
-		"timestamp": datetime.now(UTC).isoformat(timespec="seconds"),
+		"timestamp": datetime.now(ZoneInfo("Asia/Seoul")).isoformat(timespec="seconds"),
 		"config": config,
-		"segments_files": [str(path) for path in args.segments],
-		"formats": formats,
-		"selection": {"ids": args.ids, "sample": args.sample, "seed": args.seed},
 		"tempos": rendered,
 	}
 	(output / "manifest.json").write_text(
@@ -86,23 +66,26 @@ def main() -> None:
 
 
 def _select_segments(
-	parser: argparse.ArgumentParser,
 	segments: list[Segment],
 	*,
-	ids: str | None,
+	ids: list[str] | None,
 	sample: int | None,
 	seed: int | None,
 ) -> list[Segment]:
 	if ids:
-		wanted = set(ids.split(","))
+		wanted = set(ids)
 		missing = wanted - {s.id for s in segments}
 		if missing:
-			parser.error(f"IDs not in the segment files: {sorted(missing)}")
+			raise ValueError(f"IDs not in the segment files: {sorted(missing)}")
+
 		return [s for s in segments if s.id in wanted]
+
 	if sample is None:
-		parser.error("select segments with --ids or --sample/--seed")
+		raise ValueError("select segments with ids or sample and seed")
+
 	if seed is None:
-		parser.error("--sample requires --seed")
+		raise ValueError("sample requires seed")
+
 	return random.Random(seed).sample(segments, sample)
 
 

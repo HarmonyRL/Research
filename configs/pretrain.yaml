@@ -1,7 +1,10 @@
 # Pretraining of the chord policy π_ref.
-# `model` holds PolicyConfig fields and `train` PretrainArguments fields.
+defaults:
+    - hydra_defaults
+    - _self_
+name: ${now:%Y%m%d-%H%M%S}
 data_dir: data/processed
-run_dir: runs/pretrain
+output_dir: runs/pretrain/${name}
 seed: 0
 model:
     dim: 384

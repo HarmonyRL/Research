@@ -1,0 +1,9 @@
+# Samples of a chord policy.
+kind: policy
+model: runs/pretrain/final/best
+restrict_no_chord: true
+temperature: 0.85
+greedy: false
+samples: 8
+seed: 0
+batch_size: 64

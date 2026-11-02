@@ -22,8 +22,8 @@ from .tokens import token_ids
 class CriticConfig:
 	"""Structure of `ChordCritic`, which `save_pretrained` stores as `config.json`."""
 
-	backbone: str = "manoskary/musicbert"
-	tokenizer: str = "manoskary/miditok-REMI"
+	backbone: str = "data/pretrained/musicbert"
+	tokenizer: str = "data/pretrained/miditok-REMI"
 	max_tokens: int = 1024
 
 

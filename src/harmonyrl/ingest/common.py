@@ -12,7 +12,7 @@ SNAP = Fraction(1, 48)
 
 @dataclass(frozen=True)
 class ImportedMelody:
-	"""An imported melody with the the key signature the file declared (None when absent)."""
+	"""An imported melody with the key signature the file declared (None when absent)."""
 
 	melody: Melody
 	declared_key: Key | None = None

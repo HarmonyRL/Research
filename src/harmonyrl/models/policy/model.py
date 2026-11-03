@@ -33,6 +33,7 @@ from ..features import (
 	TEMPO_BUCKETS,
 	EventTargets,
 	melody_features,
+	prefix_targets,
 )
 from ..hub import StrictModelHubMixin, head_values_json
 
@@ -226,6 +227,7 @@ class ChordPolicy(nn.Module, StrictModelHubMixin, license="cc-by-nc-sa-3.0"):
 		self,
 		melodies: Sequence[Melody],
 		*,
+		prefixes: Sequence[Sequence[ChordEvent]] | None = None,
 		temperature: float = 1.0,
 		greedy: bool = False,
 		generator: torch.Generator | None = None,
@@ -235,15 +237,22 @@ class ChordPolicy(nn.Module, StrictModelHubMixin, license="cc-by-nc-sa-3.0"):
 		if temperature <= 0:
 			raise ValueError(f"temperature must be positive, got {temperature}")
 
+		if prefixes is None:
+			prefixes = [()] * len(melodies)
+
 		if batch_size is None:
-			return self._generate_batch(melodies, temperature, greedy, generator)
+			return self._generate_batch(melodies, prefixes, temperature, greedy, generator)
 
 		order = sorted(range(len(melodies)), key=lambda i: melodies[i].length)
 		results: list[tuple[ChordEvent, ...]] = [() for _ in melodies]
 
 		for chunk in batched(order, batch_size, strict=False):
 			outputs = self._generate_batch(
-				[melodies[i] for i in chunk], temperature, greedy, generator
+				[melodies[i] for i in chunk],
+				[prefixes[i] for i in chunk],
+				temperature,
+				greedy,
+				generator,
 			)
 
 			for i, events in zip(chunk, outputs, strict=True):
@@ -254,35 +263,51 @@ class ChordPolicy(nn.Module, StrictModelHubMixin, license="cc-by-nc-sa-3.0"):
 	def _generate_batch(
 		self,
 		melodies: Sequence[Melody],
+		prefixes: Sequence[Sequence[ChordEvent]],
 		temperature: float,
 		greedy: bool,
 		generator: torch.Generator | None,
 	) -> list[tuple[ChordEvent, ...]]:
 		device = self.not_predicted.device
 		heads = tuple(HEAD_VALUES)
+		restrict = self.config.restrict_no_chord
+		openings = [
+			prefix_targets(melody, prefix, restrict_no_chord=restrict)
+			for melody, prefix in zip(melodies, prefixes, strict=True)
+		]
 		batch = collate([(melody_features(melody), _no_events()) for melody in melodies]).to(device)
 		frames = self.encode(batch)
 
 		size = len(melodies)
+		rows = torch.arange(size, device=device)
 		lengths = [melody.length for melody in melodies]
 		limits = [no_chord_limit(melody) for melody in melodies]
-		restrict = self.config.restrict_no_chord
-		positions = [0] * size
+		positions = [sum(event.duration for event in prefix) for prefix in prefixes]
 
-		events: list[list[ChordEvent]] = [[] for _ in melodies]
-		starts = torch.zeros(size, 0, dtype=torch.long, device=device)
-		values = torch.zeros(size, 0, len(heads), dtype=torch.long, device=device)
+		events: list[list[ChordEvent]] = [list(prefix) for prefix in prefixes]
+		# Every event lasts at least 1 8th note, so no melody has more events than its length.
+		starts = torch.zeros(size, max(lengths), dtype=torch.long, device=device)
+		values = torch.full(
+			(size, max(lengths), len(heads)), IGNORE, dtype=torch.long, device=device
+		)
+
+		for b, opening in enumerate(openings):
+			count = len(opening.starts)
+			starts[b, :count] = torch.from_numpy(opening.starts).to(device)
+			values[b, :count] = torch.from_numpy(opening.values).to(device)
 
 		while active := [b for b in range(size) if positions[b] < lengths[b]]:
-			step = [min(p, n - 1) for p, n in zip(positions, lengths, strict=True)]
-			starts = torch.cat((starts, torch.tensor(step, device=device)[:, None]), dim=1)
-			blank = torch.full((size, 1, len(heads)), IGNORE, dtype=torch.long, device=device)
-			values = torch.cat((values, blank), dim=1)
-			counts = torch.tensor(
-				[len(events[b]) + (b in active) for b in range(size)], device=device
-			)
-			event_mask = torch.arange(values.shape[1], device=device) < counts[:, None]
-			x = self.event_states(frames, batch.frame_mask, starts, values, event_mask)[:, -1]
+			counts = [len(e) for e in events]
+			for b in active:
+				starts[b, counts[b]] = positions[b]
+
+			width = max(counts[b] for b in active) + 1
+			current = torch.tensor([min(c, width - 1) for c in counts], device=device)
+			ends = torch.tensor([counts[b] + (b in active) for b in range(size)], device=device)
+			event_mask = torch.arange(width, device=device) < ends[:, None]
+			x = self.event_states(
+				frames, batch.frame_mask, starts[:, :width], values[:, :width], event_mask
+			)[rows, current]
 
 			chosen: list[dict[str, Any]] = [{} for _ in range(size)]
 			for index, head in enumerate(heads):
@@ -310,10 +335,10 @@ class ChordPolicy(nn.Module, StrictModelHubMixin, license="cc-by-nc-sa-3.0"):
 
 					for b, value in zip(predicted, picks, strict=True):
 						chosen[b][head] = HEAD_VALUES[head][value]
-						values[b, -1, index] = value
+						values[b, counts[b], index] = value
 
 				if index < len(self.chosen):
-					column = values[:, -1, index]
+					column = values[rows, current, index]
 					x = x + self.chosen[index](
 						torch.where(column == IGNORE, self.not_predicted[index], column)
 					)

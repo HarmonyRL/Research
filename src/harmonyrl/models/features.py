@@ -1,5 +1,6 @@
 """Model inputs and training targets derived from schema types. A frame is one 8th note."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from math import ceil, floor, log2
 
@@ -7,6 +8,7 @@ import numpy as np
 
 from harmonyrl.schema import (
 	HEAD_VALUES,
+	ChordEvent,
 	Melody,
 	Mode,
 	Section,
@@ -125,23 +127,34 @@ def event_targets(segment: Segment, *, restrict_no_chord: bool = False) -> Event
 	`no_chord_limit` of the melody. Raises ValueError if a target falls outside its mask,
 	which means the segment breaks the contract.
 	"""
+	try:
+		return prefix_targets(segment.melody, segment.events, restrict_no_chord=restrict_no_chord)
+	except ValueError as error:
+		raise ValueError(f"{segment.id}: {error}") from error
+
+
+def prefix_targets(
+	melody: Melody, events: Sequence[ChordEvent], *, restrict_no_chord: bool = False
+) -> EventTargets:
+	"""Targets of `events`, the opening events of a harmonization of `melody`, as `event_targets`
+	builds them."""
 	heads = tuple(HEAD_VALUES)
-	count = len(segment.events)
+	count = len(events)
 	starts = np.zeros(count, dtype=np.int64)
 	values = np.full((count, len(heads)), IGNORE, dtype=np.int64)
 	masks = {head: np.ones((count, len(v)), dtype=bool) for head, v in HEAD_VALUES.items()}
 
-	limit = no_chord_limit(segment.melody)
+	limit = no_chord_limit(melody)
 	start = 0
 	previous_no_chord = False
 
-	for i, event in enumerate(segment.events):
+	for i, event in enumerate(events):
 		starts[i] = start
 		no_chord_room = (0 if i else limit) if restrict_no_chord else None
 		target: dict[str, object] = {"root": None}
 
 		if event.chord is not None:
-			chord = project(event.chord, segment.melody.key_at(start))
+			chord = project(event.chord, melody.key_at(start))
 			target = {head: getattr(chord, head) for head in heads if head != "duration"}
 
 		target["duration"] = event.duration
@@ -154,12 +167,12 @@ def event_targets(segment: Segment, *, restrict_no_chord: bool = False) -> Event
 				head,
 				target,
 				previous_no_chord=previous_no_chord,
-				remaining=segment.melody.length - start,
+				remaining=melody.length - start,
 				no_chord_room=no_chord_room,
 			)
 			index = _INDEX[head][target[head]]
 			if not mask[index]:
-				raise ValueError(f"{segment.id}: event {i} has masked {head} {target[head]!r}")
+				raise ValueError(f"event {i} has masked {head} {target[head]!r}")
 
 			masks[head][i] = mask
 			values[i, h] = index

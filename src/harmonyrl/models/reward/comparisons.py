@@ -104,3 +104,14 @@ def ranking_comparisons(directory: Path) -> list[ComparisonRef]:
 			)
 
 	return refs
+
+
+def read_unlabeled(directory: Path) -> list[tuple[Segment, Segment]]:
+	"""Every 2 items of the unalbeled groups of the round `directory`, none when it has none."""
+	key = json.loads((directory / "key.json").read_text(encoding="utf-8"))
+	if "unlabeled" not in key:
+		return []
+
+	files = [read_segments(directory / name) for name in key["unlabeled"]["events"].values()]
+
+	return [(a[row], b[row]) for a, b in combinations(files, 2) for row in range(len(a))]

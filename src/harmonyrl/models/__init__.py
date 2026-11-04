@@ -14,6 +14,7 @@ from .reward import (
 	ranking_comparisons,
 	ranking_groups,
 	read_comparisons,
+	read_unlabeled,
 	seconds,
 	write_comparisons,
 )
@@ -38,6 +39,7 @@ __all__ = [
 	"ranking_comparisons",
 	"ranking_groups",
 	"read_comparisons",
+	"read_unlabeled",
 	"seconds",
 	"write_comparisons",
 ]

@@ -91,7 +91,7 @@ def main(cfg: DictConfig) -> None:
 		scores = head_disagreement(reward, drawn)
 		order = sorted(range(len(drawn)), key=lambda i: scores[i], reverse=True)
 		drawn = [drawn[i] for i in order]
-		disagreement = [disagreement[i] for i in order]
+		disagreement = [scores[i] for i in order]
 
 	kept, unlabeled = drawn[: config["groups"]], drawn[config["groups"] :]
 	best_of: list[bool] = [False] * len(kept)

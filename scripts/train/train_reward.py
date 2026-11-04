@@ -19,6 +19,7 @@ from harmonyrl.models import (
 	RewardConfig,
 	RewardTrainer,
 	read_comparisons,
+	read_unlabeled,
 )
 
 REPO = Path(__file__).resolve().parents[2]
@@ -43,6 +44,7 @@ def main(cfg: DictConfig) -> None:
 	_write_json(run_dir / "meta.json", meta)
 
 	comparisons = [c for round_dir in config["rounds"] for c in read_comparisons(Path(round_dir))]
+	unlabeled = [p for round_dir in config["rounds"] for p in read_unlabeled(Path(round_dir))]
 
 	torch.manual_seed(config["seed"])
 	reward = ChordReward.from_backbone(RewardConfig(**config["model"]))
@@ -50,11 +52,13 @@ def main(cfg: DictConfig) -> None:
 		reward,
 		RewardArguments(output_dir=run_dir, seed=config["seed"], **config["train"]),
 		comparisons,
+		unlabeled,
 	)
 
 	metrics = trainer.train()
 	meta["finished"] = datetime.now(ZoneInfo("Asia/Seoul")).isoformat(timespec="seconds")
 	meta["comparisons"] = len(comparisons)
+	meta["unlabeled_pairs"] = len(unlabeled)
 	meta["metrics"] = metrics
 	_write_json(run_dir / "meta.json", meta)
 

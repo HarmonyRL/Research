@@ -10,11 +10,8 @@ import music21
 
 from harmonyrl.schema import ChordEvent, Key, Melody, Meter, Note
 
-from .symbol import chord_symbol, key_sharps
+from .symbol import chord_symbol, key_sharps, pitch_names
 from .voicing import check_tiling
-
-_DOTTABLE = (128, 96, 64, 48, 32, 24, 16, 12, 8, 6, 4, 3, 2, 1)
-"""Rest lengths in 8th notes, longest first, that one dotted rest can express."""
 
 
 def melody_to_score(melody: Melody, events: Sequence[ChordEvent]) -> music21.stream.Score:
@@ -31,18 +28,19 @@ def melody_to_score(melody: Melody, events: Sequence[ChordEvent]) -> music21.str
 	for note in melody.notes:
 		if note.onset > previous_end:
 			elements.extend(_rest_events(previous_end, note.onset, melody.meter))
-		elements.extend(_note_events(note, bar))
+		elements.extend(_note_events(note, bar, pitch_names(melody.key_at(note.onset))))
 		previous_end = note.offset
 
 	if previous_end < melody.length:
 		elements.extend(_rest_events(previous_end, Fraction(melody.length), melody.meter))
 
+	symbols: list[tuple[Fraction, music21.harmony.Harmony]] = []
 	position = Fraction(0)
 	for event in events:
 		if event.chord is not None:
-			elements.append((position, chord_symbol(event.chord, melody.key_at(position))))
+			symbols.append((position, chord_symbol(event.chord, melody.key_at(position))))
 		else:
-			elements.append((position, music21.harmony.NoChord()))
+			symbols.append((position, music21.harmony.NoChord()))
 
 		position += event.duration
 
@@ -57,6 +55,7 @@ def melody_to_score(melody: Melody, events: Sequence[ChordEvent]) -> music21.str
 	elements.sort(key=lambda element: element[0])
 	measure_count = ceil(Fraction(melody.length, bar))
 	cursor = 0
+	measures: list[music21.stream.Measure] = []
 
 	for index in range(measure_count):
 		measure = music21.stream.Measure(number=index + 1)
@@ -86,15 +85,23 @@ def melody_to_score(melody: Melody, events: Sequence[ChordEvent]) -> music21.str
 
 		measure.duration = music21.duration.Duration(Fraction(bar, 2))
 		part.append(measure)
+		measures.append(measure)
+
+	part.makeNotation(inPlace=True)
+	for start, symbol in symbols:
+		measures[int(start) // bar].insert(Fraction(int(start) % bar, 2), symbol)
 
 	score = music21.stream.Score()
 	score.insert(0, part)
 	return score
 
 
-def _note_events(note: Note, bar: int) -> list[tuple[Fraction, music21.note.Note]]:
+def _note_events(
+	note: Note, bar: int, names: dict[int, str]
+) -> list[tuple[Fraction, music21.note.Note]]:
 	"""One melody note as export events, split at barlines and into single-notehead
-	pieces connected with ties."""
+	pieces connected with ties. Pitches are spelled by the active key so the key signature,
+	not per-note accidentals, carries the diatonic spelling."""
 	spans: list[tuple[Fraction, Fraction]] = []
 	onset = note.onset
 	remaining = note.duration
@@ -109,10 +116,10 @@ def _note_events(note: Note, bar: int) -> list[tuple[Fraction, music21.note.Note
 		remaining -= bar_piece
 
 	rendered: list[tuple[Fraction, music21.note.Note]] = []
+	spelling = f"{names[note.pitch % 12]}{note.pitch // 12 - 1}"
 
 	for i, (start, length) in enumerate(spans):
-		piece = music21.note.Note()
-		piece.pitch.midi = note.pitch
+		piece = music21.note.Note(spelling)
 		piece.quarterLength = Fraction(length, 2)
 
 		if len(spans) > 1:
@@ -153,12 +160,7 @@ def _rest_events(
 	events: list[tuple[Fraction, music21.note.Rest]] = []
 
 	for offset, piece in pieces:
-		lengths: list[Fraction] = [piece]
-
-		if piece.denominator == 1 and int(piece) not in _DOTTABLE:
-			lengths = [Fraction(n) for n in _split_dottable(int(piece))]
-
-		for length in lengths:
+		for length in _notehead_lengths(piece):
 			rest = music21.note.Rest()
 			rest.quarterLength = Fraction(length, 2)
 			events.append((offset, rest))
@@ -167,19 +169,12 @@ def _rest_events(
 	return events
 
 
-def _split_dottable(length: int) -> list[int]:
-	pieces = []
-	while length:
-		piece = next(size for size in _DOTTABLE if size <= length)
-		pieces.append(piece)
-		length -= piece
-
-	return pieces
-
-
 def write_score(score: music21.stream.Score, path: Path) -> None:
-	"""Write MusicXML deterministically."""
-	score.write("musicxml", fp=str(path))
+	"""Write MusicXML deterministically.
+
+	Notation is fixed beforehand by `melody_to_score`, so the writer must not recompute it:
+	ChordSymbol pitches would join the accidental context and seed cautionary naturals."""
+	score.write("musicxml", fp=str(path), makeNotation=False)
 	_normalize(path)
 
 

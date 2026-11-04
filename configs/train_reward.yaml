@@ -7,8 +7,11 @@ output_dir: runs/reward/${name}
 rounds:
   - data/preferences/valid-b32
   - data/preferences/valid-bp
+  - data/preferences/round-1
 seed: 0
 model:
+  features: policy
+  policy: runs/pretrain/final/best
   backbone: data/pretrained/musicbert
   tokenizer: data/pretrained/miditok-REMI
   max_tokens: 1024
@@ -16,10 +19,10 @@ model:
 train:
   l2: 50.0
   steps: 200
-  folds: 10
+  folds: null
   curve: [0.25, 0.5, 0.75, 1.0]
-  batch_size: 16
-  transpositions: [-3, -2, -1, 1, 2, 3]
+  batch_size: 64
+  transpositions: []
   consistency: 0.0
   pseudo_margin: null
   pseudo_weight: 0.5

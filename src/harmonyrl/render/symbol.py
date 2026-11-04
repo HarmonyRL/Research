@@ -7,8 +7,8 @@ from harmonyrl.schema import Key, Mode, RawChord, chord_pitch_classes
 _LETTERS = "CDEFGAB"
 _LETTER_PC = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
 _SHARP_NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
-_FLAT_NAMES = ("C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B")
-_NEUTRAL_NAMES = ("C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B")
+_FLAT_NAMES = ("C", "D-", "D", "E-", "E", "F", "G-", "G", "A-", "A", "B-", "B")
+_NEUTRAL_NAMES = ("C", "D-", "D", "E-", "E", "F", "F#", "G", "A-", "A", "B-", "B")
 
 _MAJOR_SHARPS = (0, -5, 2, -3, 4, -1, 6, 1, -4, 3, -2, 5)
 _REL_MAJOR_OFFSET: dict[Mode, int] = {
@@ -43,6 +43,23 @@ _KIND_REWRITES: dict[str, tuple[str, tuple[tuple[str, int, int], ...]]] = {
 	"minor-major-11th": ("minor-major-seventh", (("add", 9, 0), ("add", 11, 0))),
 }
 
+_MODIFICATIONS: dict[str, tuple[str, int, int]] = {
+	"addb9": ("add", 9, -1),
+	"add9": ("add", 9, 0),
+	"add#9": ("add", 9, 1),
+	"add3": ("add", 3, 0),
+	"add11": ("add", 11, 0),
+	"add#11": ("add", 11, 1),
+	"add5": ("add", 5, 0),
+	"add6": ("add", 13, 0),
+	"add13": ("add", 13, 0),
+	"addb13": ("add", 13, -1),
+	"add7": ("add", 7, 0),
+	"add#7": ("add", 7, 1),
+	"alterb5": ("alter", 5, -1),
+	"alter#5": ("alter", 5, 1),
+}
+
 
 def key_sharps(key: Key) -> int:
 	"""Number of sharps (negative for flats) in the key signature of `key`."""
@@ -59,21 +76,49 @@ def midi_key_number(key: Key) -> int:
 
 def chord_symbol(chord: RawChord, key: Key) -> music21.harmony.ChordSymbol:
 	"""ChordSymbol for `chord` in `key`, with root spelling from the active scale and
-	quality from the root-relative interval structure."""
+	quality from the root-relative interval structure.
+
+	Subtraction degrees are never emitted: score software renders them as "no3"/"no5".
+	A missing fifth is left unnotated, a missing third only shows through sus kinds or the
+	power kind, and maj7-based sus chords (no MusicXML kind exists) carry their name in the
+	kind text attribute over an empty kind."""
 	bass_pc, pitch_classes = chord_pitch_classes(chord, key)
-	names = _spellings(_spelling_key(chord, key))
+	names = pitch_names(_spelling_key(chord, key))
 	root_pc = _root_pitch_class(chord, key)
 
 	intervals = frozenset((pc - root_pc) % 12 for pc in pitch_classes)
-	figure = _figure_name(names[root_pc]) + _figure_suffix(intervals)
+	kind, mods = _suffix_plan(intervals)
 
+	figure = names[root_pc]
 	if bass_pc != root_pc:
-		figure += "/" + _figure_name(names[bass_pc])
+		figure += "/" + names[bass_pc]
 
-	cs = music21.harmony.ChordSymbol(figure=figure)
+	if kind == "5":
+		cs = music21.harmony.ChordSymbol(figure=figure)
+		cs.chordKind = "power"
+		_apply_modifications(cs, mods)
+	elif kind in ("maj7sus2", "maj7sus4"):
+		cs = music21.harmony.ChordSymbol(figure=figure)
+		cs.chordKind = "none"
+		cs.chordKindStr = kind
+		_apply_modifications(cs, mods)
+	elif kind == "7sus2":
+		cs = music21.harmony.ChordSymbol(figure=figure + "sus2" + "".join(mods))
+		_apply_modifications(cs, ["add7"])
+	else:
+		cs = music21.harmony.ChordSymbol(figure=figure + kind + "".join(mods))
+
 	_rewrite_kind(cs)
 
 	return cs
+
+
+def _apply_modifications(cs: music21.harmony.ChordSymbol, mods: list[str]) -> None:
+	for mod in mods:
+		cs.addChordStepModification(
+			music21.harmony.ChordStepModification(*_MODIFICATIONS[mod]),
+			updatePitches=False,
+		)
 
 
 def _rewrite_kind(cs: music21.harmony.ChordSymbol) -> None:
@@ -102,9 +147,9 @@ def _spelling_key(chord: RawChord, key: Key) -> Key:
 	return Key(target_pc, Mode.MAJOR)
 
 
-def _spellings(key: Key) -> dict[int, str]:
+def pitch_names(key: Key) -> dict[int, str]:
 	"""Pitch-class to note-name spellings: the key's scale degrees first, then accidentals
-	that follow the direction of its key signature."""
+	that follow the direction of its key signature (flats as '-', music21 style)."""
 	sharps = key_sharps(key)
 	fallback = _SHARP_NAMES if sharps > 0 else _FLAT_NAMES if sharps < 0 else _NEUTRAL_NAMES
 	tonic_name = fallback[key.tonic]
@@ -119,7 +164,7 @@ def _spellings(key: Key) -> dict[int, str]:
 		if diff > 6:
 			diff -= 12
 		if diff in (-1, 0, 1):
-			names[target] = _LETTERS[letter] + {-1: "b", 0: "", 1: "#"}[diff]
+			names[target] = _LETTERS[letter] + {-1: "-", 0: "", 1: "#"}[diff]
 
 		letter = (letter + 1) % 7
 
@@ -143,13 +188,11 @@ def _root_pitch_class(chord: RawChord, key: Key) -> int:
 	return (key.tonic + root_offset) % 12
 
 
-def _figure_name(name: str) -> str:
-	"""music21 chord figures spell flats with '-', unlike the 'b' of note names."""
-	return name[0] + name[1:].replace("b", "-")
+def _suffix_plan(intervals: frozenset[int]) -> tuple[str, list[str]]:
+	"""Kind token and modification strings for the root-relative interval structure.
 
-
-def _figure_suffix(intervals: frozenset[int]) -> str:
-	"""Figure suffix for the root-relative interval structure."""
+	Omitted degrees are never expressed as subtraction mods: an absent fifth is not
+	notated, and a missing third only shows through sus kinds or the power kind "5"."""
 	has_maj3 = 4 in intervals
 	has_min3 = not has_maj3 and 3 in intervals
 	has_p5 = 7 in intervals
@@ -192,8 +235,6 @@ def _figure_suffix(intervals: frozenset[int]) -> str:
 			elif has_aug5:
 				used.add(8)
 				mods.append("alter#5")
-			else:
-				mods.append("omit5")
 
 			prefix = "" if has_maj3 else "m"
 			if has_maj7 or has_min7:
@@ -213,20 +254,16 @@ def _figure_suffix(intervals: frozenset[int]) -> str:
 			used.add(5 if suspension == 4 else 2)
 		if has_maj7:
 			used.add(11)
-			kind = "maj7"
-			mods.append("omit3")
-			if suspension:
-				mods.append(f"add{suspension}")
+			kind = "maj7sus4" if suspension == 4 else "maj7sus2" if suspension == 2 else "maj7"
 		elif has_min7:
 			used.add(10)
-			# An unaltered added 7th under suspended-second reads as 7sus2.
-			kind = "7sus4" if suspension == 4 else "sus2" if suspension == 2 else "7"
-			if not suspension:
-				mods.append("omit3")
+			kind = "7sus4" if suspension == 4 else "7sus2" if suspension == 2 else "7"
+		elif suspension:
+			kind = "sus4" if suspension == 4 else "sus2"
+		elif has_p5 or has_dim5 or has_aug5:
+			kind = "5"
 		else:
-			kind = "sus4" if suspension == 4 else "sus2" if suspension == 2 else ""
-			if not suspension:
-				mods.append("omit3")
+			kind = ""
 
 		if has_p5:
 			used.add(7)
@@ -236,8 +273,6 @@ def _figure_suffix(intervals: frozenset[int]) -> str:
 		elif has_aug5:
 			used.add(8)
 			mods.append("alter#5")
-		else:
-			mods.append("omit5")
 
 	has_seventh = has_maj7 or has_min7 or is_dim7
 	for step in sorted(intervals - used):
@@ -246,7 +281,7 @@ def _figure_suffix(intervals: frozenset[int]) -> str:
 		else:
 			mods.append(_ADD_STEP[step])
 
-	return kind + "".join(mods)
+	return kind, mods
 
 
 def _extended_seventh_kind(

@@ -3,7 +3,6 @@
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
-from itertools import batched
 from pathlib import Path
 
 import numpy as np
@@ -13,7 +12,6 @@ from torch.nn import functional
 from harmonyrl.data import transpose
 from harmonyrl.schema import Segment
 
-from .batch import collate
 from .comparisons import Comparison
 from .model import ChordReward
 
@@ -29,10 +27,10 @@ class RewardArguments:
 	seed: int = 0
 	l2: float = 50.0
 	steps: int = 200
-	folds: int = 10
+	folds: int | None = None
 	curve: Sequence[float] = (0.25, 0.5, 0.75, 1.0)
 	batch_size: int = 16
-	transpositions: Sequence[int] = (-3, -2, -1, 1, 2, 3)
+	transpositions: Sequence[int] = ()
 	pseudo_margin: float | None = None
 	pseudo_weight: float = 0.5
 	consistency: float = 0.0
@@ -90,7 +88,8 @@ class RewardTrainer:
 		songs = rng.permutation(np.unique(self._songs))
 		hits: dict[float, list[bool]] = {fraction: [] for fraction in args.curve}
 
-		for test_songs in np.array_split(songs, min(args.folds, len(songs))):
+		splits = len(songs) if args.folds is None else min(args.folds, len(songs))
+		for test_songs in np.array_split(songs, splits):
 			test = self._mask(np.isin(self._songs, test_songs))
 			unlabeled = self._mask(~np.isin(self._unlabeled_songs, test_songs))
 			train_songs = songs[~np.isin(songs, test_songs)]
@@ -101,7 +100,7 @@ class RewardTrainer:
 					self._mask(np.isin(self._songs, kept)), unlabeled, rng
 				)
 				margins = ((self._winners[0, test] - self._losers[0, test]) / std) @ weight.T
-				hits[fraction] += (margins.mean(dim=1) > 0).tolist()
+				hits[fraction] += (margins[:, 0] > 0).tolist()
 
 		metrics = {f"agreement_{fraction:g}": float(np.mean(h)) for fraction, h in hits.items()}
 		_logger.info(
@@ -151,21 +150,18 @@ class RewardTrainer:
 	def _embed(self, segments: Sequence[Segment]) -> torch.Tensor:
 		"""Encoder features (copies, segments, hidden) of `segments` in their own key,
 		then transposed by each of `transpositions`."""
-		shifts = (0, *self.args.transpositions)
-		return torch.stack([self._embed_once([transpose(s, k) for s in segments]) for k in shifts])
+		reward = self.reward.to(self.device)
+		copies = []
 
-	@torch.no_grad()
-	def _embed_once(self, segments: Sequence[Segment]) -> torch.Tensor:
-		reward = self.reward.to(self.device).eval()
-		inputs = [reward.token_ids(s.melody, s.events) for s in segments]
-		order = sorted(range(len(inputs)), key=lambda i: len(inputs[i]), reverse=True)
-		features = torch.zeros(len(inputs), reward.heads.in_features, device=self.device)
+		for shift in (0, *self.args.transpositions):
+			moved = [transpose(s, shift) for s in segments]
+			copies.append(
+				reward.features(
+					[s.melody for s in moved], [s.events for s in moved], self.args.batch_size
+				)
+			)
 
-		for chunk in batched(order, self.args.batch_size, strict=False):
-			batch = collate([inputs[i] for i in chunk]).to(self.device)
-			features[list(chunk)] = reward.embed(batch).float()
-
-		return features
+		return torch.stack(copies)
 
 
 def _pseudo_labels(
@@ -184,7 +180,7 @@ def _pseudo_labels(
 
 	return (
 		torch.where(forward, first, second)[:, sure],
-		torch.where(forward, second, first)[:, sure]
+		torch.where(forward, second, first)[:, sure],
 	)
 
 
@@ -198,8 +194,8 @@ def _fit(
 	pseudo: tuple[torch.Tensor, torch.Tensor] | None = None,
 	unlabeled: tuple[torch.Tensor, torch.Tensor] | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-	"""Head weights (heads, hidden) and the feature mean and std they expect, each head fit by
-	L-BFGS to its own bootstrap of the songs."""
+	"""Head weights (heads, hidden) and the feature mean and std they expect: the 1st head fit to
+	every comparison, the others by L-BFGS to their own bootstrap of the songs."""
 	copies = winners.shape[0]
 	features = torch.cat((winners, losers), dim=1).flatten(0, 1)
 	mean = features.mean(dim=0)
@@ -207,8 +203,11 @@ def _fit(
 	differences = ((winners - losers) / std).flatten(0, 1)
 
 	unique, index = np.unique(songs, return_inverse=True)
-	draws = rng.integers(len(unique), size=(heads, len(unique)))
-	counts = np.stack([np.bincount(draw, minlength=len(unique))[index] for draw in draws])
+	draws = rng.integers(len(unique), size=(heads - 1, len(unique)))
+	counts = np.stack(
+		[np.ones(len(songs), dtype=int)]
+		+ [np.bincount(draw, minlength=len(unique))[index] for draw in draws]
+	)
 	weights = torch.tensor(np.tile(counts, copies) / copies, dtype=differences.dtype)
 	weights = weights.to(differences.device)
 

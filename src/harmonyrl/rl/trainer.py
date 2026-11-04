@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from harmonyrl.models import ChordCritic, ChordPolicy
+from harmonyrl.models import ChordPolicy, ChordReward
 from harmonyrl.schema import Segment, merge_repeats
 
 from .local_reward import local_rewards
@@ -20,7 +20,7 @@ from .rollout import Rollout, rollout, rollout_stats
 _logger = logging.getLogger(__name__)
 
 _DIVERGENCES = ("reverse", "forward")
-_REWARDS = ("critic", "local")
+_REWARDS = ("learned", "local")
 
 
 @dataclass(frozen=True)
@@ -30,7 +30,7 @@ class RLArguments:
 	output_dir: str | Path
 	seed: int = 0
 	divergence: str = "reverse"
-	reward: str = "critic"
+	reward: str = "learned"
 	beta: float = 0.1
 	clip_reward: float = 2.0
 	updates: int = 200
@@ -77,7 +77,7 @@ class RLTrainer:
 		self,
 		policy: ChordPolicy,
 		reference: ChordPolicy,
-		critic: ChordCritic | None,
+		reward: ChordReward | None,
 		args: RLArguments,
 		train: Sequence[Segment],
 		valid: Sequence[Segment],
@@ -91,16 +91,16 @@ class RLTrainer:
 
 		if args.reward not in _REWARDS:
 			raise ValueError(f"reward must be one of {_REWARDS}, got {args.reward}")
-		if args.reward == "critic" and critic is None:
-			raise ValueError("the critic reward needs a critic")
-		if args.reward == "local" and critic is not None:
-			raise ValueError("the local reward takes no critic")
+		if args.reward == "learned" and reward is None:
+			raise ValueError("the learned reward needs a reward model")
+		if args.reward == "local" and reward is not None:
+			raise ValueError("the local reward takes no reward model")
 
 		self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
 
 		self.policy = policy.to(self.device).eval()
 		self.reference = reference.to(self.device).eval()
-		self.critic = critic.to(self.device).eval() if critic is not None else None
+		self.reward = reward.to(self.device).eval() if reward is not None else None
 
 		self.args = args
 		self._rng = np.random.default_rng(args.seed)
@@ -174,11 +174,11 @@ class RLTrainer:
 		return rollout(self.policy, self.reference, self._rewards, repeated, generator=generator)
 
 	def _rewards(self, samples: Sequence[Segment], segments: Sequence[Segment]) -> torch.Tensor:
-		if self.critic is None:
+		if self.reward is None:
 			return local_rewards(samples, segments)
 
 		return terminal_rewards(
-			self.critic,
+			self.reward,
 			[s.melody for s in samples],
 			[s.events for s in samples],
 			self.args.clip_reward,

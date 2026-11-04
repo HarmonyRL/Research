@@ -1,4 +1,4 @@
-"""Critic inputs: a harmonization played with the fixed voicing, as REMI+BPE token ids."""
+"""Reward inputs: a harmonization played with the fixed voicing, as REMI+BPE token ids."""
 
 from collections.abc import Sequence
 
@@ -28,7 +28,7 @@ def harmonization_score(melody: Melody, events: Sequence[ChordEvent]) -> ScoreTi
 
 		track = TrackTick("", notes[0].program)
 
-		# Notes read from a MIDI file come ordered by time and pitch, and the tokenizer keepts the
+		# Notes read from a MIDI file come ordered by time and pitch, and the tokenizer keeps the
 		# order it is given, so the voicing order would otherwise change the tokens.
 		for note in sorted(notes, key=lambda n: (n.onset, n.pitch)):
 			track.notes.append(

@@ -1,4 +1,4 @@
-"""Fine-tune the pretrained policy against the fixed structure critic or the local reward,
+"""Fine-tune the pretrained policy against the fixed preference reward or the local reward,
 with a KL to it.
 """
 
@@ -15,7 +15,7 @@ from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
 
 from harmonyrl.data import read_segments
-from harmonyrl.models import ChordCritic, ChordPolicy
+from harmonyrl.models import ChordPolicy, ChordReward
 from harmonyrl.rl import RLArguments, RLTrainer, policy_from_reference
 from harmonyrl.schema import Split
 
@@ -45,15 +45,15 @@ def main(cfg: DictConfig) -> None:
 	valid = read_segments(data_dir / f"segments_{Split.VALID.value}.jsonl")
 
 	arguments = RLArguments(output_dir=run_dir, seed=config["seed"], **config["train"])
-	critic = None
-	if arguments.reward == "critic":
-		critic = ChordCritic.from_pretrained(config["critic"])
+	reward = None
+	if arguments.reward == "learned":
+		reward = ChordReward.from_pretrained(config["reward_model"])
 
 	reference = ChordPolicy.from_pretrained(config["reference"])
 	trainer = RLTrainer(
 		policy_from_reference(reference),
 		reference,
-		critic,
+		reward,
 		arguments,
 		train=train,
 		valid=valid,

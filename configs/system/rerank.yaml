@@ -2,7 +2,7 @@ defaults:
     - policy
     - _self_
 kind: rerank
-critic: runs/critic/main/best
+reward: runs/reward/main/model
 candidates: 8
 beta: 0.0
 clip_reward: 2.0

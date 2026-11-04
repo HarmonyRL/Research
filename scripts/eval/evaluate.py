@@ -16,7 +16,7 @@ from omegaconf import DictConfig, OmegaConf
 
 from harmonyrl.data import read_segments, write_segments
 from harmonyrl.metrics import evaluate_corpus
-from harmonyrl.models import ChordCritic, ChordHMM, ChordPolicy
+from harmonyrl.models import ChordHMM, ChordPolicy, ChordReward
 from harmonyrl.rl import policy_from_reference, terminal_rewards
 from harmonyrl.schema import ChordEvent, Segment, Split
 
@@ -55,7 +55,7 @@ def main(cfg: DictConfig) -> None:
 		)
 
 	metrics = evaluate_corpus(segments, harmonizations, train)
-	metrics |= _critic_logits(config["critics"], segments, harmonizations)
+	metrics |= _reward_scores(config["rewards"], segments, harmonizations)
 	meta["finished"] = datetime.now(ZoneInfo("Asia/Seoul")).isoformat(timespec="seconds")
 	_write_json(run_dir / "meta.json", meta)
 	_write_json(run_dir / "metrics.json", metrics)
@@ -100,15 +100,15 @@ def _generate(
 def _rerank(
 	segments: Sequence[Segment], settings: dict[str, Any]
 ) -> list[list[Sequence[ChordEvent]]]:
-	"""Per sample, 1 of `candidates` new policy samples, chosen by the clipped critic logit."""
+	"""Per sample, 1 of `candidates` new policy samples, chosen by the clipped preference score."""
 	samples, candidates, beta = settings["samples"], settings["candidates"], settings["beta"]
 	if beta < 0:
 		raise ValueError(f"beta must not be negative, got {beta}")
 
 	drawn = _generate(segments, settings, samples * candidates)
-	critic = ChordCritic.from_pretrained(settings["critic"]).to(_device())
+	reward = ChordReward.from_pretrained(settings["reward"]).to(_device())
 	rewards = terminal_rewards(
-		critic,
+		reward,
 		[s.melody for s, group in zip(segments, drawn, strict=True) for _ in group],
 		[events for group in drawn for events in group],
 		settings["clip_reward"],
@@ -128,21 +128,23 @@ def _rerank(
 	]
 
 
-def _critic_logits(
-	critics: dict[str, str],
+def _reward_scores(
+	rewards: dict[str, str],
 	segments: Sequence[Segment],
 	harmonizations: Sequence[Sequence[Sequence[ChordEvent]]],
 ) -> dict[str, float]:
-	"""Mean unclipped logit of every harmonization under each critic of `critics`."""
+	"""Mean unclipped score of every harmonization under each reward model of `rewards`."""
 	melodies = [
 		s.melody for s, samples in zip(segments, harmonizations, strict=True) for _ in samples
 	]
 	events = [e for samples in harmonizations for e in samples]
-	logits: dict[str, float] = {}
-	for name, path in critics.items():
-		critic = ChordCritic.from_pretrained(path).to(_device())
-		logits[f"{name}_logit"] = float(np.mean(critic.score(melodies, events)))
-	return logits
+	scores: dict[str, float] = {}
+
+	for name, path in rewards.items():
+		reward = ChordReward.from_pretrained(path).to(_device())
+		scores[f"{name}_score"] = float(np.mean(reward.score(melodies, events)))
+
+	return scores
 
 
 def _device() -> str:

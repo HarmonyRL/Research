@@ -7,6 +7,5 @@ data_dir: data/processed
 split: valid
 name: ???
 output_dir: runs/eval-${split}/${name}
-critics:
-    critic: runs/critic/main/best
-    holdout: runs/critic/holdout/best
+rewards:
+    reward: runs/reward/main/model

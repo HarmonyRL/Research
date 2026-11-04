@@ -1,4 +1,4 @@
-# KL-regularized fine-tuning of π_ref against the structure critic or RL-Chord's local reward.
+# KL-regularized fine-tuning of π_ref against the preference reward or RL-Chord's local reward.
 defaults:
     - hydra_defaults
     - _self_
@@ -6,11 +6,11 @@ name: ${now:%Y%m%d-%H%M%S}
 data_dir: data/processed
 output_dir: runs/rl/${name}
 reference: runs/pretrain/final/best
-critic: runs/critic/main/best
+reward_model: runs/reward/main/model
 seed: 0
 train:
     divergence: reverse
-    reward: critic
+    reward: learned
     beta: 0.1
     clip_reward: 2.0
     updates: 200

@@ -1,0 +1,21 @@
+# Preference reward: linear heads over a frozen encoder, fit to the preference comparisons.
+defaults:
+    - hydra_defaults
+    - _self_
+name: ${now:%Y%m%d-%H%M%S}
+output_dir: runs/reward/${name}
+rounds:
+    - data/preferences/valid-b32
+    - data/preferences/valid-bp
+seed: 0
+model:
+    backbone: data/pretrained/musicbert
+    tokenizer: data/pretrained/miditok-REMI
+    max_tokens: 1024
+    heads: 5
+train:
+    l2: 50.0
+    steps: 200
+    folds: 10
+    curve: [0.25, 0.5, 0.75, 1.0]
+    batch_size: 16

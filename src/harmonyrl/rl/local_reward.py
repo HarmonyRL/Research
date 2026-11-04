@@ -1,4 +1,4 @@
-"""Per-note rewards, the local reward baseline against the critic."""
+"""Per-note rewards, the local reward baseline against the learned reward."""
 
 from collections.abc import Sequence
 from dataclasses import dataclass

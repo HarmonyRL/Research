@@ -1,8 +1,7 @@
 """Transposition of a segment for the listener: its 1st key moves onto the white keys."""
 
-from dataclasses import replace
-
-from harmonyrl.schema import Key, KeySpan, Mode, Segment
+from harmonyrl.data import transpose
+from harmonyrl.schema import Mode, Segment
 
 WHITE_TONICS = {
 	Mode.MAJOR: 0,
@@ -23,13 +22,5 @@ def to_white_keys(segment: Segment) -> tuple[Segment, int]:
 	and those semitones."""
 	first = segment.melody.keys[0].key
 	shift = (WHITE_TONICS[first.mode] - first.tonic + 6) % 12 - 6
-	melody = replace(
-		segment.melody,
-		notes=tuple(replace(n, pitch=n.pitch + shift) for n in segment.melody.notes),
-		keys=tuple(
-			KeySpan(k.start, Key((k.key.tonic + shift) % 12, k.key.mode))
-			for k in segment.melody.keys
-		),
-	)
 
-	return replace(segment, melody=melody), shift
+	return transpose(segment, shift), shift

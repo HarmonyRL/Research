@@ -10,6 +10,7 @@ import numpy as np
 import torch
 from torch.nn import functional
 
+from harmonyrl.data import transpose
 from harmonyrl.schema import Segment
 
 from .batch import collate
@@ -31,8 +32,10 @@ class RewardArguments:
 	folds: int = 10
 	curve: Sequence[float] = (0.25, 0.5, 0.75, 1.0)
 	batch_size: int = 16
+	transpositions: Sequence[int] = (-3, -2, -1, 1, 2, 3)
 	pseudo_margin: float | None = None
 	pseudo_weight: float = 0.5
+	consistency: float = 0.0
 
 
 class RewardTrainer:
@@ -80,16 +83,12 @@ class RewardTrainer:
 		return metrics | {"pseudo_labels": pseudo}
 
 	def cross_validate(self) -> dict[str, float]:
-		"""Agreement of the head mean with held-out preference comparisons, songs split into
-		`folds`, for each fraction in `curve` of the training songs of a fold.
-
-		With pseudo labels on, the same without them is reported as `baseline_agreement_*`.
-		"""
+		"""Agreement of the head mean with held-out preference comparisons in their own key,
+		songs split into `folds`, for each fraction in `curve` of the training songs of a fold."""
 		args = self.args
 		rng = np.random.default_rng(args.seed)
 		songs = rng.permutation(np.unique(self._songs))
-		pseudo = args.pseudo_margin is not None and len(self._unlabeled_songs) > 0
-		hits: dict[str, list[bool]] = {}
+		hits: dict[float, list[bool]] = {fraction: [] for fraction in args.curve}
 
 		for test_songs in np.array_split(songs, min(args.folds, len(songs))):
 			test = self._mask(np.isin(self._songs, test_songs))
@@ -98,27 +97,20 @@ class RewardTrainer:
 
 			for fraction in args.curve:
 				kept = train_songs[: max(1, round(fraction * len(train_songs)))]
-				labeled = self._mask(np.isin(self._songs, kept))
-				runs = {"agreement": unlabeled}
-				if pseudo:
-					runs["baseline_agreement"] = self._mask(
-						np.zeros(len(self._unlabeled_songs), dtype=bool)
-					)
+				weight, _, std, _ = self._fit_heads(
+					self._mask(np.isin(self._songs, kept)), unlabeled, rng
+				)
+				margins = ((self._winners[0, test] - self._losers[0, test]) / std) @ weight.T
+				hits[fraction] += (margins.mean(dim=1) > 0).tolist()
 
-				for name, pool in runs.items():
-					weight, _, std, _ = self._fit_heads(labeled, pool, rng)
-					margins = ((self._winners[test] - self._losers[test]) / std) @ weight.T
-					hits.setdefault(f"{name}_{fraction:g}", []).extend(
-						(margins.mean(dim=1) > 0).tolist()
-					)
-
-		metrics = {name: float(np.mean(h)) for name, h in hits.items()}
+		metrics = {f"agreement_{fraction:g}": float(np.mean(h)) for fraction, h in hits.items()}
 		_logger.info(
-			"%d comparisons over %d songs, %d unlabeled pairs: %s",
+			"%d comparisons over %d songs, %d unlabeled pairs, agreement by fraction of training "
+			"songs: %s",
 			len(self._songs),
 			len(songs),
 			len(self._unlabeled_songs),
-			", ".join(f"{k} {v:.3f}" for k, v in metrics.items()),
+			", ".join(f"{k.removeprefix('agreement_')} {v:.3f}" for k, v in metrics.items()),
 		)
 
 		return metrics
@@ -135,28 +127,35 @@ class RewardTrainer:
 		Returns the weights, mean, std, and pseudo labels used.
 		"""
 		args = self.args
-		winners, losers = self._winners[labeled], self._losers[labeled]
+		heads = self.reward.config.heads
+		winners, losers = self._winners[:, labeled], self._losers[:, labeled]
 		songs = self._songs[labeled.cpu().numpy()]
-		weight, mean, std = _fit(winners, losers, songs, args, self.reward.config.heads, rng)
+		first, second = self._first[:, unlabeled], self._second[:, unlabeled]
+		pool = (first, second) if args.consistency > 0 and first.shape[1] > 0 else None
+
+		weight, mean, std = _fit(winners, losers, songs, args, heads, rng, unlabeled=pool)
 
 		if args.pseudo_margin is None or not bool(unlabeled.any()):
 			return weight, mean, std, 0
 
-		extra = _pseudo_labels(
-			weight, std, self._first[unlabeled], self._second[unlabeled], args.pseudo_margin
-		)
+		pseudo = _pseudo_labels(weight, std, first, second, args.pseudo_margin)
 		weight, mean, std = _fit(
-			winners, losers, songs, args, self.reward.config.heads, rng, extra=extra
+			winners, losers, songs, args, heads, rng, pseudo=pseudo, unlabeled=pool
 		)
 
-		return weight, mean, std, len(extra[0])
+		return weight, mean, std, pseudo[0].shape[1]
 
 	def _mask(self, mask: np.ndarray) -> torch.Tensor:
 		return torch.from_numpy(mask).to(self.device)
 
-	@torch.no_grad()
 	def _embed(self, segments: Sequence[Segment]) -> torch.Tensor:
-		"""Encoder features (segments, hidden) of `segments`."""
+		"""Encoder features (copies, segments, hidden) of `segments` in their own key,
+		then transposed by each of `transpositions`."""
+		shifts = (0, *self.args.transpositions)
+		return torch.stack([self._embed_once([transpose(s, k) for s in segments]) for k in shifts])
+
+	@torch.no_grad()
+	def _embed_once(self, segments: Sequence[Segment]) -> torch.Tensor:
 		reward = self.reward.to(self.device).eval()
 		inputs = [reward.token_ids(s.melody, s.events) for s in segments]
 		order = sorted(range(len(inputs)), key=lambda i: len(inputs[i]), reverse=True)
@@ -176,14 +175,17 @@ def _pseudo_labels(
 	second: torch.Tensor,
 	margin: float,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-	"""Unlabeled pairs that every head orders alike with a mean margin of `margin` or more,
-	as the features of their winners and losers."""
-	margins = ((first - second) / std) @ weight.T
+	"""Unlabeled pairs that every head orders alike in their own key with a mean margin of `margin`
+	or more, as the features (copies, pairs, hidden) of their winners and losers."""
+	margins = ((first[0] - second[0]) / std) @ weight.T
 	unanimous = (margins > 0).all(dim=1) | (margins < 0).all(dim=1)
 	sure = unanimous & (margins.mean(dim=1).abs() >= margin)
-	forward = (margins.mean(dim=1) > 0)[:, None]
+	forward = (margins.mean(dim=1) > 0)[None, :, None]
 
-	return torch.where(forward, first, second)[sure], torch.where(forward, second, first)[sure]
+	return (
+		torch.where(forward, first, second)[:, sure],
+		torch.where(forward, second, first)[:, sure]
+	)
 
 
 def _fit(
@@ -193,25 +195,33 @@ def _fit(
 	args: RewardArguments,
 	heads: int,
 	rng: np.random.Generator,
-	extra: tuple[torch.Tensor, torch.Tensor] | None = None,
+	pseudo: tuple[torch.Tensor, torch.Tensor] | None = None,
+	unlabeled: tuple[torch.Tensor, torch.Tensor] | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
 	"""Head weights (heads, hidden) and the feature mean and std they expect, each head fit by
-	L-BFGS to its own bootstrap of the songs. `extra` comparisons, the pseudo labels, enter every
-	head with weight `args.pseudo_weight`."""
-	features = torch.cat((winners, losers))
+	L-BFGS to its own bootstrap of the songs."""
+	copies = winners.shape[0]
+	features = torch.cat((winners, losers), dim=1).flatten(0, 1)
 	mean = features.mean(dim=0)
 	std = features.std(dim=0).clamp(min=1e-6)
-	differences = (winners - losers) / std
+	differences = ((winners - losers) / std).flatten(0, 1)
 
 	unique, index = np.unique(songs, return_inverse=True)
 	draws = rng.integers(len(unique), size=(heads, len(unique)))
 	counts = np.stack([np.bincount(draw, minlength=len(unique))[index] for draw in draws])
-	weights = torch.tensor(counts, dtype=differences.dtype, device=differences.device)
+	weights = torch.tensor(np.tile(counts, copies) / copies, dtype=differences.dtype)
+	weights = weights.to(differences.device)
 
-	if extra is not None:
-		differences = torch.cat((differences, (extra[0] - extra[1]) / std))
-		pseudo = torch.full((heads, len(extra[0])), args.pseudo_weight, device=weights.device)
-		weights = torch.cat((weights, pseudo), dim=1)
+	if pseudo is not None:
+		extra = ((pseudo[0] - pseudo[1]) / std).flatten(0, 1)
+		differences = torch.cat((differences, extra))
+		share = torch.full((heads, len(extra)), args.pseudo_weight / copies, device=weights.device)
+		weights = torch.cat((weights, share), dim=1)
+
+	drift = None
+	if unlabeled is not None:
+		margins = (unlabeled[0] - unlabeled[1]) / std
+		drift = (margins[1:] - margins[:1]).flatten(0, 1)
 
 	weight = torch.zeros(heads, differences.shape[1], device=differences.device, requires_grad=True)
 	optimizer = torch.optim.LBFGS([weight], max_iter=args.steps, line_search_fn="strong_wolfe")
@@ -223,8 +233,10 @@ def _fit(
 		loss = (
 			weights.T * functional.softplus(-margins)
 		).sum() + args.l2 / 2 * weight.square().sum()
-		loss.backward()
+		if drift is not None:
+			loss = loss + args.consistency * (drift @ weight.T).square().sum()
 
+		loss.backward()
 		return loss
 
 	optimizer.step(closure)

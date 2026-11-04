@@ -3,6 +3,7 @@
 from .join import alignment_report, beat_value, load_json_gz
 from .prepare import prepare_dataset
 from .serialize import read_segments, write_segments
+from .transpose import transpose
 
 __all__ = [
 	"alignment_report",
@@ -10,5 +11,6 @@ __all__ = [
 	"load_json_gz",
 	"prepare_dataset",
 	"read_segments",
+	"transpose",
 	"write_segments",
 ]

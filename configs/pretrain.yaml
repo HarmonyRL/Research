@@ -1,25 +1,25 @@
 # Pretraining of the chord policy π_ref.
 defaults:
-    - hydra_defaults
-    - _self_
+  - hydra_defaults
+  - _self_
 name: ${now:%Y%m%d-%H%M%S}
 data_dir: data/processed
 output_dir: runs/pretrain/${name}
 seed: 0
 model:
-    dim: 384
-    attention_heads: 4
-    encoder_layers: 4
-    decoder_layers: 4
-    ff_mult: 4
-    dropout: 0.3
+  dim: 384
+  attention_heads: 4
+  encoder_layers: 4
+  decoder_layers: 4
+  ff_mult: 4
+  dropout: 0.3
 train:
-    max_frames: 8192
-    lr: 3.0e-4
-    weight_decay: 0.1
-    warmup_steps: 500
-    max_epochs: 15
-    patience: 5
-    grad_clip: 1.0
-    section_dropout: 0.2
-    tempo_dropout: 0.2
+  max_frames: 8192
+  lr: 3.0e-4
+  weight_decay: 0.1
+  warmup_steps: 500
+  max_epochs: 15
+  patience: 5
+  grad_clip: 1.0
+  section_dropout: 0.2
+  tempo_dropout: 0.2

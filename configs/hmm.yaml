@@ -1,11 +1,11 @@
 # The HMM baseline.
 defaults:
-    - hydra_defaults
-    - _self_
+  - hydra_defaults
+  - _self_
 name: ${now:%Y%m%d-%H%M%S}
 data_dir: data/processed
 output_dir: runs/hmm/${name}
 model:
-    min_count: 20
-    beta: 0.08
-    min_variance: 0.03
+  min_count: 20
+  beta: 0.08
+  min_variance: 0.03

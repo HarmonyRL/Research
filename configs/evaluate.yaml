@@ -1,11 +1,11 @@
 # Evaluation of 1 system on 1 split against the human accompaniments.
 defaults:
-    - hydra_defaults
-    - system: ???
-    - _self_
+  - hydra_defaults
+  - system: ???
+  - _self_
 data_dir: data/processed
 split: valid
 name: ???
 output_dir: runs/eval-${split}/${name}
 rewards:
-    reward: runs/reward/main/model
+  reward: runs/reward/main/model

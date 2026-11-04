@@ -1,16 +1,16 @@
 # Tool paths and output options for rendering.
 defaults:
-    - hydra_defaults
-    - _self_
+  - hydra_defaults
+  - _self_
 soundfont: /usr/share/sounds/sf2/FluidR3_GM.sf2
 mscore: ~/.local/bin/mscore
 sample_rate: 44100
 gain: 0.5
 mp3_bitrate: 192k
 segments:
-    - data/processed/segments_train.jsonl
-    - data/processed/segments_valid.jsonl
-    - data/processed/segments_test.jsonl
+  - data/processed/segments_train.jsonl
+  - data/processed/segments_valid.jsonl
+  - data/processed/segments_test.jsonl
 ids: null
 sample: null
 seed: null

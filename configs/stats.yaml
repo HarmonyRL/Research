@@ -1,7 +1,7 @@
 # Source and output locations for dataset statistics.
 defaults:
-    - hydra_defaults
-    - _self_
+  - hydra_defaults
+  - _self_
 source_dir: data/raw/hooktheory
 processed_dir: data/processed
 output_dir: runs/stats/baseline

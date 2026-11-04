@@ -1,7 +1,7 @@
 # KL-regularized fine-tuning of π_ref against the preference reward or RL-Chord's local reward.
 defaults:
-    - hydra_defaults
-    - _self_
+  - hydra_defaults
+  - _self_
 name: ${now:%Y%m%d-%H%M%S}
 data_dir: data/processed
 output_dir: runs/rl/${name}
@@ -9,15 +9,15 @@ reference: runs/pretrain/final/best
 reward_model: runs/reward/main/model
 seed: 0
 train:
-    divergence: reverse
-    reward: learned
-    beta: 0.1
-    clip_reward: 2.0
-    updates: 200
-    melodies: 32
-    samples: 8
-    lr: 1.0e-5
-    grad_clip: 1.0
-    eval_every: 10
-    eval_melodies: 64
-    save_every: 50
+  divergence: reverse
+  reward: learned
+  beta: 0.1
+  clip_reward: 2.0
+  updates: 200
+  melodies: 32
+  samples: 8
+  lr: 1.0e-5
+  grad_clip: 1.0
+  eval_every: 10
+  eval_melodies: 64
+  save_every: 50

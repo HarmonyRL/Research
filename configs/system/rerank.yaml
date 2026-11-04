@@ -1,6 +1,6 @@
 defaults:
-    - policy
-    - _self_
+  - policy
+  - _self_
 kind: rerank
 reward: runs/reward/main/model
 candidates: 8

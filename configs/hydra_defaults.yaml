@@ -1,15 +1,15 @@
 # @package _global_
 defaults:
-    - override /hydra/job_logging: none
-    - override /hydra/hydra_logging: none
+  - override /hydra/job_logging: none
+  - override /hydra/hydra_logging: none
 hydra:
-    run:
-        dir: ${output_dir}
-    sweep:
-        dir: ${output_dir}
-        subdir: ${hydra:job.override_dirname}
-    job:
-        config:
-            override_dirname:
-                exclude_keys: [name, output_dir]
-    output_subdir: null
+  run:
+    dir: ${output_dir}
+  sweep:
+    dir: ${output_dir}
+    subdir: ${hydra:job.override_dirname}
+  job:
+    config:
+      override_dirname:
+        exclude_keys: [name, output_dir]
+  output_subdir: null

@@ -9,8 +9,12 @@ from .reward import (
 	RewardArguments,
 	RewardConfig,
 	RewardTrainer,
+	best_of_group,
+	head_disagreement,
 	ranking_comparisons,
+	ranking_groups,
 	read_comparisons,
+	seconds,
 	write_comparisons,
 )
 
@@ -26,10 +30,14 @@ __all__ = [
 	"RewardArguments",
 	"RewardConfig",
 	"RewardTrainer",
+	"best_of_group",
 	"collate",
 	"event_targets",
+	"head_disagreement",
 	"melody_features",
 	"ranking_comparisons",
+	"ranking_groups",
 	"read_comparisons",
+	"seconds",
 	"write_comparisons",
 ]

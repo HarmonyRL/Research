@@ -1,0 +1,24 @@
+# A round of owner rankings: K continuations of the human chords of short segments.
+defaults:
+  - hydra_defaults
+  - _self_
+name: ???
+output_dir: data/preferences/${name}
+data_dir: data/processed
+split: train
+reference: runs/pretrain/final/best
+reward_model: null
+seed: 0
+groups: 40
+items: 3
+repeats: 2
+temperature: 0.85
+seconds: [10, 20]
+min_bars_apart: 2
+candidates: 4
+best_of: 32
+best_of_share: 0.25
+soundfont: /usr/share/sounds/sf2/FluidR3_GM.sf2
+mscore: ~/.local/bin/mscore
+sample_rate: 44100
+gain: 0.5

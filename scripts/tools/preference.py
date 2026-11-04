@@ -1,6 +1,6 @@
 """Run a pairwise preference listening session.
 
-Usage: streamlit run scripts/preference.py -- --pairs pairs.csv --results results.csv
+Usage: streamlit run scripts/tools/preference.py -- --pairs pairs.csv --results results.csv
 """
 
 from pathlib import Path

@@ -1,14 +1,7 @@
-"""Pairwise preference listening sessions on a Streamlit page.
-
-Reads a pairs CSV (pair_id,a_path,b_path,tag), plays the two renditions side by
-side with sources hidden and left/right order randomized per session, and appends
-one row per choice to the results CSV. Already-answered pairs are skipped, so a
-session can be resumed at any time.
-"""
+"""Pairwise preference listening sessions on a Streamlit page."""
 
 import csv
 import random
-import re
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -17,7 +10,7 @@ from zoneinfo import ZoneInfo
 
 import streamlit as st
 
-_AUDIO_FORMATS = {".wav": "audio/wav", ".mp3": "audio/mpeg"}
+from .common import audio_format, has_score, show_score
 
 
 @dataclass(frozen=True)
@@ -67,10 +60,10 @@ def _pair_page(pair: Pair, queue_length: int, results_path: Path) -> None:
 	left_col, right_col = st.columns(2)
 	with left_col:
 		st.caption("왼쪽 샘플")
-		st.audio(left.read_bytes(), format=_audio_format(left))
+		st.audio(left.read_bytes(), format=audio_format(left))
 	with right_col:
 		st.caption("오른쪽 샘플")
-		st.audio(right.read_bytes(), format=_audio_format(right))
+		st.audio(right.read_bytes(), format=audio_format(right))
 
 	_show_scores(left, right)
 
@@ -97,53 +90,20 @@ def _pair_page(pair: Pair, queue_length: int, results_path: Path) -> None:
 		st.rerun()
 
 
-def _audio_format(path: Path) -> str:
-	return _AUDIO_FORMATS.get(path.suffix.lower(), "audio/wav")
-
-
 def _show_scores(left: Path, right: Path) -> None:
 	"""Show both scores full-width in tabs: half-column images are too small to read.
 
 	Each side falls back to its PDF in an iframe when page images were not rendered."""
-	if not (_has_score(left) or _has_score(right)):
+	if not (has_score(left) or has_score(right)):
 		return
 
 	left_tab, right_tab = st.tabs(["왼쪽 악보", "오른쪽 악보"])
 
 	with left_tab:
-		_show_score(left)
+		show_score(left)
 
 	with right_tab:
-		_show_score(right)
-
-
-def _has_score(audio_path: Path) -> bool:
-	return bool(_score_pages(audio_path)) or audio_path.with_suffix(".pdf").is_file()
-
-
-def _score_pages(audio_path: Path) -> list[Path]:
-	"""Page images the rendering pipeline wrote next to the audio, in numeric page order."""
-	pattern = re.compile(rf"^{re.escape(audio_path.stem)}-(\d+)\.png$")
-	numbered: list[tuple[int, Path]] = []
-
-	for candidate in audio_path.parent.glob(f"{audio_path.stem}-*.png"):
-		match = pattern.match(candidate.name)
-		if match is not None:
-			numbered.append((int(match.group(1)), candidate))
-
-	return [path for _, path in sorted(numbered)]
-
-
-def _show_score(audio_path: Path) -> None:
-	"""Show the score rendered next to the audio, when one exists."""
-	pages = _score_pages(audio_path)
-	if pages:
-		st.image([page.read_bytes() for page in pages])
-		return
-
-	score = audio_path.with_suffix(".pdf")
-	if score.exists():
-		st.iframe(score, height=520)
+		show_score(right)
 
 
 def _done_page(results_path: Path) -> None:

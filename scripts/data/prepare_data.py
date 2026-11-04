@@ -21,10 +21,10 @@ from harmonyrl.data import (
 )
 from harmonyrl.schema import Segment, Split, project
 
-REPO = Path(__file__).resolve().parent.parent
+REPO = Path(__file__).resolve().parents[2]
 
 
-@hydra.main(config_path="../configs", config_name="prepare_data")
+@hydra.main(config_path="../../configs", config_name="prepare_data")
 def main(cfg: DictConfig) -> None:
 	config = cast(dict[str, Any], OmegaConf.to_container(cfg, resolve=True))
 	source_dir = Path(config["source_dir"]).expanduser()

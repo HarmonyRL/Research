@@ -25,12 +25,12 @@ from harmonyrl.data import beat_value, load_json_gz, read_segments
 from harmonyrl.metrics import idiom_counts
 from harmonyrl.schema import Segment
 
-REPO = Path(__file__).resolve().parent.parent
+REPO = Path(__file__).resolve().parents[2]
 GRIDS = {"half_bar": Fraction(2), "beat": Fraction(1), "eighth": Fraction(1, 2)}
 """Quantization grids in beats, coarser first."""
 
 
-@hydra.main(config_path="../configs", config_name="stats")
+@hydra.main(config_path="../../configs", config_name="stats")
 def main(cfg: DictConfig) -> None:
 	config = cast(dict[str, Any], OmegaConf.to_container(cfg, resolve=True))
 	processed = Path(config["processed_dir"])

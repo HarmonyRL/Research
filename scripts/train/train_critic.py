@@ -19,10 +19,10 @@ from harmonyrl.data import read_segments
 from harmonyrl.models import ChordCritic, CriticArguments, CriticConfig, CriticTrainer
 from harmonyrl.schema import ChordEvent, Segment, Split, no_chord_limit
 
-REPO = Path(__file__).resolve().parent.parent
+REPO = Path(__file__).resolve().parents[2]
 
 
-@hydra.main(config_path="../configs", config_name="train_critic")
+@hydra.main(config_path="../../configs", config_name="train_critic")
 def main(cfg: DictConfig) -> None:
 	logging.basicConfig(level=logging.INFO, format="%(message)s")
 

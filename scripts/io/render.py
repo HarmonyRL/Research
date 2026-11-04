@@ -24,12 +24,12 @@ from harmonyrl.render import (
 )
 from harmonyrl.schema import Segment
 
-REPO = Path(__file__).resolve().parent.parent
+REPO = Path(__file__).resolve().parents[2]
 _SUPPORTED_FORMATS = frozenset({"midi", "wav", "mp3", "musicxml", "pdf", "png", "mscz", "mscx"})
 _SCORE_FORMATS = frozenset({"musicxml", "pdf", "png", "mscz", "mscx"})
 
 
-@hydra.main(config_path="../configs", config_name="rendering")
+@hydra.main(config_path="../../configs", config_name="rendering")
 def main(cfg: DictConfig) -> None:
 	config = cast(dict[str, Any], OmegaConf.to_container(cfg, resolve=True))
 	formats = config["formats"]

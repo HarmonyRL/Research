@@ -20,12 +20,12 @@ from harmonyrl.models import ChordCritic, ChordHMM, ChordPolicy
 from harmonyrl.rl import policy_from_reference, terminal_rewards
 from harmonyrl.schema import ChordEvent, Segment, Split
 
-REPO = Path(__file__).resolve().parent.parent
+REPO = Path(__file__).resolve().parents[2]
 
 type Harmonizer = Callable[[Sequence[Segment]], list[list[Sequence[ChordEvent]]]]
 
 
-@hydra.main(config_path="../configs", config_name="evaluate")
+@hydra.main(config_path="../../configs", config_name="evaluate")
 def main(cfg: DictConfig) -> None:
 	config = cast(dict[str, Any], OmegaConf.to_container(cfg, resolve=True))
 	started = datetime.now(ZoneInfo("Asia/Seoul"))

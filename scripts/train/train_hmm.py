@@ -16,10 +16,10 @@ from harmonyrl.data import read_segments
 from harmonyrl.models import ChordHMM, HMMConfig
 from harmonyrl.schema import ChordEvent, Melody, RawChord, Segment, Split, project
 
-REPO = Path(__file__).resolve().parent.parent
+REPO = Path(__file__).resolve().parents[2]
 
 
-@hydra.main(config_path="../configs", config_name="hmm")
+@hydra.main(config_path="../../configs", config_name="hmm")
 def main(cfg: DictConfig) -> None:
 	config = cast(dict[str, Any], OmegaConf.to_container(cfg, resolve=True))
 	started = datetime.now(ZoneInfo("Asia/Seoul"))

@@ -12,7 +12,7 @@ train:
   divergence: reverse
   reward: learned
   beta: 0.1
-  clip_reward: 2.0
+  clip_reward: 5.0
   updates: 200
   melodies: 32
   samples: 8

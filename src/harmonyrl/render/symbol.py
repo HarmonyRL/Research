@@ -81,7 +81,8 @@ def chord_symbol(chord: RawChord, key: Key) -> music21.harmony.ChordSymbol:
 	Subtraction degrees are never emitted: score software renders them as "no3"/"no5".
 	A missing fifth is left unnotated, a missing third only shows through sus kinds or the
 	power kind, and maj7-based sus chords (no MusicXML kind exists) carry their name in the
-	kind text attribute over an empty kind."""
+	kind text attribute over the unspecified kind — MuseScore drops the root of a
+	"none"-kind harmony, and "other" keeps both."""
 	bass_pc, pitch_classes = chord_pitch_classes(chord, key)
 	names = pitch_names(_spelling_key(chord, key))
 	root_pc = _root_pitch_class(chord, key)
@@ -99,7 +100,7 @@ def chord_symbol(chord: RawChord, key: Key) -> music21.harmony.ChordSymbol:
 		_apply_modifications(cs, mods)
 	elif kind in ("maj7sus2", "maj7sus4"):
 		cs = music21.harmony.ChordSymbol(figure=figure)
-		cs.chordKind = "none"
+		cs.chordKind = "other"
 		cs.chordKindStr = kind
 		_apply_modifications(cs, mods)
 	elif kind == "7sus2":

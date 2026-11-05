@@ -1,6 +1,7 @@
 """Lead-sheet scores: a melody staff with chord symbols, meter, and key signatures."""
 
 import re
+from bisect import bisect_right
 from collections.abc import Sequence
 from fractions import Fraction
 from math import ceil, floor
@@ -15,12 +16,19 @@ from .voicing import check_tiling
 
 
 def melody_to_score(melody: Melody, events: Sequence[ChordEvent]) -> music21.stream.Score:
-	"""A lead sheet of a melody with chord events: melody with chord symbols above the staff."""
+	"""A lead sheet of a melody with chord events: melody with chord symbols above the staff.
+
+	Key signatures are drawn at barlines only: a mid-bar key change is snapped to the next
+	barline (and dropped when it falls past the end), each change is preceded by a double
+	barline, and the score closes with a final barline."""
 	check_tiling(melody, events)
 
 	bar = melody.meter.bar_eighths
 	part = music21.stream.Part()
 	part.partName = "Melody"
+
+	changes = _key_changes(melody, bar)
+	starts = sorted(changes)
 
 	elements: list[tuple[Fraction, music21.base.Music21Object]] = []
 	previous_end = Fraction(0)
@@ -28,11 +36,14 @@ def melody_to_score(melody: Melody, events: Sequence[ChordEvent]) -> music21.str
 	for note in melody.notes:
 		if note.onset > previous_end:
 			elements.extend(_rest_events(previous_end, note.onset, melody.meter))
-		elements.extend(_note_events(note, bar, pitch_names(melody.key_at(note.onset))))
+		elements.extend(
+			_note_events(note, bar, pitch_names(_display_key(note.onset, starts, changes)))
+		)
 		previous_end = note.offset
 
-	if previous_end < melody.length:
-		elements.extend(_rest_events(previous_end, Fraction(melody.length), melody.meter))
+	measure_count = ceil(Fraction(melody.length, bar))
+	if previous_end < measure_count * bar:
+		elements.extend(_rest_events(previous_end, Fraction(measure_count * bar), melody.meter))
 
 	symbols: list[tuple[Fraction, music21.harmony.Harmony]] = []
 	position = Fraction(0)
@@ -44,16 +55,7 @@ def melody_to_score(melody: Melody, events: Sequence[ChordEvent]) -> music21.str
 
 		position += event.duration
 
-	signatures: dict[Fraction, music21.key.KeySignature] = {}
-	previous_key: Key | None = None
-
-	for span in melody.keys:
-		if span.key != previous_key:
-			signatures[Fraction(span.start)] = music21.key.KeySignature(key_sharps(span.key))
-			previous_key = span.key
-
 	elements.sort(key=lambda element: element[0])
-	measure_count = ceil(Fraction(melody.length, bar))
 	cursor = 0
 	measures: list[music21.stream.Measure] = []
 
@@ -67,6 +69,7 @@ def melody_to_score(melody: Melody, events: Sequence[ChordEvent]) -> music21.str
 					f"{melody.meter.beats_per_bar}/{melody.meter.beat_unit}"
 				),
 			)
+			measure.insert(0, music21.clef.TrebleClef())
 
 			if melody.tempo is not None:
 				referent = music21.duration.Duration(1.5 if melody.meter.beat_unit == 8 else 1.0)
@@ -74,9 +77,8 @@ def melody_to_score(melody: Melody, events: Sequence[ChordEvent]) -> music21.str
 					0, music21.tempo.MetronomeMark(number=melody.tempo, referent=referent)
 				)
 
-		for start, signature in signatures.items():
-			if bar_start <= start < bar_start + bar:
-				measure.insert(Fraction(start - bar_start, 2), signature)
+		if bar_start in changes:
+			measure.insert(0, music21.key.KeySignature(key_sharps(changes[bar_start])))
 
 		while cursor < len(elements) and elements[cursor][0] < bar_start + bar:
 			start, element = elements[cursor]
@@ -87,6 +89,11 @@ def melody_to_score(melody: Melody, events: Sequence[ChordEvent]) -> music21.str
 		part.append(measure)
 		measures.append(measure)
 
+	for start in starts:
+		if start > 0:
+			measures[start // bar - 1].rightBarline = music21.bar.Barline("double")
+	measures[-1].rightBarline = music21.bar.Barline("final")
+
 	part.makeNotation(inPlace=True)
 	for start, symbol in symbols:
 		measures[int(start) // bar].insert(Fraction(int(start) % bar, 2), symbol)
@@ -94,6 +101,30 @@ def melody_to_score(melody: Melody, events: Sequence[ChordEvent]) -> music21.str
 	score = music21.stream.Score()
 	score.insert(0, part)
 	return score
+
+
+def _key_changes(melody: Melody, bar: int) -> dict[int, Key]:
+	"""Keys whose signature is drawn, keyed by the barline they are drawn at."""
+	changes: dict[int, Key] = {}
+	previous: Key | None = None
+
+	for span in melody.keys:
+		if span.key == previous:
+			continue
+
+		start = span.start if span.start % bar == 0 else (span.start // bar + 1) * bar
+		if start >= melody.length and changes:
+			break
+
+		changes[start] = span.key
+		previous = span.key
+
+	return changes
+
+
+def _display_key(onset: Fraction, starts: list[int], changes: dict[int, Key]) -> Key:
+	"""The key whose signature is in effect at `onset`; spans snap to barlines."""
+	return changes[starts[bisect_right(starts, onset) - 1]]
 
 
 def _note_events(

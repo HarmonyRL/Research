@@ -8,9 +8,10 @@ rounds:
   - data/preferences/valid-b32
   - data/preferences/valid-bp
   - data/preferences/round-1
+  - data/preferences/round-2
 seed: 0
 model:
-  features: policy
+  features: likelihood
   policy: runs/pretrain/final/best
   backbone: data/pretrained/musicbert
   tokenizer: data/pretrained/miditok-REMI

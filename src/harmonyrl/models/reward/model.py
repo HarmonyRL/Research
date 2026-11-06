@@ -12,14 +12,14 @@ from harmonyrl.schema import ChordEvent, Melody
 
 from ..hub import StrictModelHubMixin
 from ..policy import ChordPolicy
-from .extractors import MusicbertFeatures, PolicyFeatures
+from .extractors import LikelihoodFeatures, MusicbertFeatures, PolicyFeatures
 
 
 @dataclass(frozen=True)
 class RewardConfig:
 	"""Structure of `ChordReward`, which `save_pretrained` stores as `config.json`."""
 
-	features: str = "policy"
+	features: str = "likelihood"
 	policy: str = "runs/pretrain/final/best"
 	backbone: str = "data/pretrained/musicbert"
 	tokenizer: str = "data/pretrained/miditok-REMI"
@@ -75,7 +75,11 @@ class ChordReward(nn.Module, StrictModelHubMixin, license="cc-by-nc-sa-3.0"):
 		return self.head_scores(melodies, harmonizations, batch_size)[:, 0].tolist()
 
 
-def _features(config: RewardConfig, pretrained: bool) -> PolicyFeatures | MusicbertFeatures:
+def _features(
+	config: RewardConfig, pretrained: bool
+) -> LikelihoodFeatures | PolicyFeatures | MusicbertFeatures:
+	if config.features == "likelihood":
+		return LikelihoodFeatures(ChordPolicy.from_pretrained(config.policy))
 	if config.features == "policy":
 		return PolicyFeatures(ChordPolicy.from_pretrained(config.policy))
 	if config.features == "musicbert":

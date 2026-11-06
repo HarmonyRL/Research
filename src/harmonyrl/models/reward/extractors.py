@@ -49,7 +49,7 @@ class LikelihoodFeatures(nn.Module):
 		self.policy = policy.requires_grad_(False)
 
 	@torch.no_grad()
-	def froward(
+	def forward(
 		self,
 		melodies: Sequence[Melody],
 		harmonizations: Sequence[Sequence[ChordEvent]],

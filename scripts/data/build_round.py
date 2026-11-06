@@ -6,6 +6,7 @@ import random
 import string
 import subprocess
 from datetime import datetime
+from math import ceil
 from pathlib import Path
 from typing import Any, cast
 from zoneinfo import ZoneInfo
@@ -20,6 +21,7 @@ from harmonyrl.models import (
 	ChordPolicy,
 	ChordReward,
 	best_of_group,
+	color_groups,
 	head_disagreement,
 	ranking_groups,
 	seconds,
@@ -54,7 +56,10 @@ def main(cfg: DictConfig) -> None:
 	}
 	_write_json(run_dir / "meta.json", meta)
 
-	seed, k, low, high = config["seed"], config["items"], *config["seconds"]
+	betas = config["color_betas"]
+	seed, low, high = config["seed"], *config["seconds"]
+	k = 1 + len(betas) if betas else config["items"]
+
 	judged = _judged_songs(run_dir.parent)
 	segments = read_segments(
 		Path(config["data_dir"]) / f"segments_{Split(config['split']).value}.jsonl"
@@ -76,15 +81,28 @@ def main(cfg: DictConfig) -> None:
 	if config["reward_model"] is not None:
 		reward = ChordReward.from_pretrained(config["reward_model"]).to(device)
 
-	drawn = ranking_groups(
-		policy,
-		pool,
-		config["groups"] * config["candidates"],
-		k,
-		config["temperature"],
-		config["min_bars_apart"],
-		generator,
-	)
+	if betas:
+		drawn = color_groups(
+			policy,
+			pool,
+			config["groups"],
+			betas,
+			config["best_of"],
+			config["temperature"],
+			config["min_bars_apart"],
+			generator,
+		)
+	else:
+		drawn = ranking_groups(
+			policy,
+			pool,
+			config["groups"] * config["candidates"],
+			k,
+			config["temperature"],
+			config["min_bars_apart"],
+			generator,
+		)
+
 	disagreement: list[float | None] = [None] * len(drawn)
 
 	if reward is not None:
@@ -163,12 +181,15 @@ def main(cfg: DictConfig) -> None:
 
 	with (run_dir / "groups.csv").open("w", encoding="utf-8", newline="") as f:
 		writer = csv.writer(f)
-		writer.writerow(["group_id", "item_id", "path", "tag"])
+		writer.writerow(["group_id", "item_id", "path", "tag", "bars"])
 
 		for group_id in listed:
+			name = group_id.split("-")[-1]
+
 			for letter in letters:
-				path = run_dir / f"{group_id.split('-')[-1]}{letter}.wav"
-				writer.writerow([group_id, letter, path.resolve(), ""])
+				path = run_dir / f"{name}{letter}.wav"
+				bars = ceil(songs[name]["bars"])
+				writer.writerow([group_id, letter, path.resolve(), "", bars])
 
 	_write_json(
 		run_dir / "key.json",
@@ -177,6 +198,7 @@ def main(cfg: DictConfig) -> None:
 			"temperature": config["temperature"],
 			"split": config["split"],
 			"k": k,
+			"betas": betas,
 			"events": {letter: f"{letter}.jsonl" for letter in letters},
 			"songs": songs,
 			"unlabeled": {

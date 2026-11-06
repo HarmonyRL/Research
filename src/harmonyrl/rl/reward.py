@@ -1,11 +1,19 @@
-"""Terminal reward: the clipped score of the fixed preference reward."""
+"""Terminal rewards: the share of chords outside the key, or the score of a preference reward."""
 
 from collections.abc import Sequence
 
 import torch
 
+from harmonyrl.metrics import out_of_key_share
 from harmonyrl.models import ChordReward
-from harmonyrl.schema import ChordEvent, Melody
+from harmonyrl.schema import ChordEvent, Melody, Segment
+
+
+def color_rewards(samples: Sequence[Segment]) -> torch.Tensor:
+	"""Reward of each sample: the share of it played by chords outside the key."""
+	return torch.tensor(
+		[out_of_key_share(s.melody, s.events) for s in samples], dtype=torch.float32
+	)
 
 
 def terminal_rewards(

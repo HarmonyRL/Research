@@ -14,13 +14,13 @@ from harmonyrl.models import ChordPolicy, ChordReward
 from harmonyrl.schema import Segment, merge_repeats
 
 from .local_reward import local_rewards
-from .reward import terminal_rewards
+from .reward import color_rewards, terminal_rewards
 from .rollout import Rollout, rollout, rollout_stats
 
 _logger = logging.getLogger(__name__)
 
 _DIVERGENCES = ("reverse", "forward")
-_REWARDS = ("learned", "local")
+_REWARDS = ("color", "learned", "local")
 
 
 @dataclass(frozen=True)
@@ -30,7 +30,7 @@ class RLArguments:
 	output_dir: str | Path
 	seed: int = 0
 	divergence: str = "reverse"
-	reward: str = "learned"
+	reward: str = "color"
 	beta: float = 0.1
 	clip_reward: float = 2.0
 	updates: int = 200
@@ -93,8 +93,8 @@ class RLTrainer:
 			raise ValueError(f"reward must be one of {_REWARDS}, got {args.reward}")
 		if args.reward == "learned" and reward is None:
 			raise ValueError("the learned reward needs a reward model")
-		if args.reward == "local" and reward is not None:
-			raise ValueError("the local reward takes no reward model")
+		if args.reward != "learned" and reward is not None:
+			raise ValueError(f"the {args.reward} reward takes no reward model")
 
 		self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
 
@@ -174,7 +174,9 @@ class RLTrainer:
 		return rollout(self.policy, self.reference, self._rewards, repeated, generator=generator)
 
 	def _rewards(self, samples: Sequence[Segment], segments: Sequence[Segment]) -> torch.Tensor:
-		if self.reward is None:
+		if self.args.reward == "color":
+			return color_rewards(samples)
+		if self.args.reward == "local" or self.reward is None:
 			return local_rewards(samples, segments)
 
 		return terminal_rewards(

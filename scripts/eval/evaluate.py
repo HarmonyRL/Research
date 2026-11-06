@@ -17,7 +17,7 @@ from omegaconf import DictConfig, OmegaConf
 from harmonyrl.data import read_segments, write_segments
 from harmonyrl.metrics import evaluate_corpus
 from harmonyrl.models import ChordHMM, ChordPolicy, ChordReward
-from harmonyrl.rl import policy_from_reference, terminal_rewards
+from harmonyrl.rl import color_rewards, policy_from_reference, terminal_rewards
 from harmonyrl.schema import ChordEvent, Segment, Split
 
 REPO = Path(__file__).resolve().parents[2]
@@ -106,13 +106,21 @@ def _rerank(
 		raise ValueError(f"beta must not be negative, got {beta}")
 
 	drawn = _generate(segments, settings, samples * candidates)
-	reward = ChordReward.from_pretrained(settings["reward"]).to(_device())
-	rewards = terminal_rewards(
-		reward,
-		[s.melody for s, group in zip(segments, drawn, strict=True) for _ in group],
-		[events for group in drawn for events in group],
-		settings["clip_reward"],
-	)
+	melodies = [s.melody for s, group in zip(segments, drawn, strict=True) for _ in group]
+	harmonizations = [events for group in drawn for events in group]
+
+	if settings["reward"] == "color":
+		rewards = color_rewards(
+			[
+				Segment(s.id, s.split, s.melody, tuple(events))
+				for s, group in zip(segments, drawn, strict=True)
+				for events in group
+			]
+		)
+	else:
+		reward = ChordReward.from_pretrained(settings["reward"]).to(_device())
+		rewards = terminal_rewards(reward, melodies, harmonizations, settings["clip_reward"])
+
 	rewards = rewards.cpu().view(len(segments), samples, candidates)
 
 	if beta == 0:

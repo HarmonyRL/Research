@@ -8,7 +8,7 @@ from itertools import combinations
 import numpy as np
 import torch
 
-from harmonyrl.metrics import chord_spans
+from harmonyrl.metrics import chord_spans, out_of_key_share
 from harmonyrl.render import DEFAULT_TEMPO
 from harmonyrl.schema import ChordEvent, Melody, Segment, merge_repeats
 
@@ -146,6 +146,49 @@ def best_of_group(
 	items = (best, *group.items[1:])
 
 	return replace(group, items=items) if _apart(melody, items, min_bars_apart) else None
+
+
+def color_groups(
+	policy: ChordPolicy,
+	segments: Sequence[Segment],
+	count: int,
+	betas: Sequence[float],
+	candidates: int,
+	temperature: float,
+	min_bars_apart: int,
+	generator: torch.Generator,
+) -> list[RankingGroup]:
+	"""Up to `count` groups from `segments` in order."""
+	groups: list[RankingGroup] = []
+
+	for segment in segments:
+		if len(groups) == count:
+			break
+
+		prefix = prefix_split(segment)
+		if prefix is None:
+			continue
+
+		melody = segment.melody
+		plain, *pool = policy.generate(
+			[melody] * (candidates + 1),
+			prefixes=[segment.events[:prefix]] * (candidates + 1),
+			temperature=temperature,
+			generator=generator,
+		)
+		shares = torch.tensor(
+			[out_of_key_share(melody, events) for events in pool], device=generator.device
+		)
+		items = [plain]
+
+		for beta in betas:
+			index = torch.multinomial((shares / beta).softmax(dim=0), 1, generator=generator)
+			items.append(pool[int(index)])
+
+		if _apart(melody, items, min_bars_apart):
+			groups.append(RankingGroup(segment, prefix, tuple(items)))
+
+	return groups
 
 
 def _apart(melody: Melody, items: Sequence[Sequence[ChordEvent]], min_bars_apart: int) -> bool:

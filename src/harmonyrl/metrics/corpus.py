@@ -7,6 +7,7 @@ import numpy as np
 
 from harmonyrl.schema import ChordEvent, Segment, merge_repeats
 
+from .color import out_of_key_share
 from .density import densities
 from .distributions import js_distance
 from .diversity import chord_ngrams, copy_lengths, sample_disagreement
@@ -43,6 +44,7 @@ def evaluate_corpus(
 	melody_density: list[float] = []
 	chord_density: list[float] = []
 	disagreement: list[float] = []
+	outside: list[float] = []
 	systems: list[tuple[Segment, tuple[ChordEvent, ...]]] = []
 
 	for segment, samples in zip(segments, harmonizations, strict=True):
@@ -59,6 +61,7 @@ def evaluate_corpus(
 			idiom += idiom_counts(melody, events)
 			repeated += repeated_phrase_agreement(melody, events)
 			in_key += key_consistency(melody, events)
+			outside.append(out_of_key_share(melody, events))
 
 			notes, chords = densities(melody, events)
 			melody_density.append(notes)
@@ -95,6 +98,7 @@ def evaluate_corpus(
 		"copy_length_max": float(max(copies)),
 		"chords_per_bar": float(np.mean(chord_density)),
 		"density_correlation": float(np.corrcoef(melody_density, chord_density)[0, 1]),
+		"out_of_key_share": float(np.mean(outside)),
 		"sample_disagreement": float(np.mean(disagreement)) if disagreement else None,
 	}
 

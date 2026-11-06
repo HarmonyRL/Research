@@ -2,7 +2,7 @@
 
 from .comparisons import ranking_comparisons, read_comparisons, read_unlabeled, write_comparisons
 from .model import ChordReward, RewardConfig
-from .rounds import best_of_group, head_disagreement, ranking_groups, seconds
+from .rounds import best_of_group, color_groups, head_disagreement, ranking_groups, seconds
 from .train import RewardArguments, RewardTrainer
 
 __all__ = [
@@ -11,6 +11,7 @@ __all__ = [
 	"RewardConfig",
 	"RewardTrainer",
 	"best_of_group",
+	"color_groups",
 	"head_disagreement",
 	"ranking_comparisons",
 	"ranking_groups",

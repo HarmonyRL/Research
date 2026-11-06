@@ -1,4 +1,4 @@
-# KL-regularized fine-tuning of π_ref against the preference reward or RL-Chord's local reward.
+# KL-regularized fine-tuning of π_ref toward chords outside the key, or a learned or local reward.
 defaults:
   - hydra_defaults
   - _self_
@@ -10,7 +10,7 @@ reward_model: runs/reward/main/model
 seed: 0
 train:
   divergence: reverse
-  reward: learned
+  reward: color
   beta: 0.1
   clip_reward: 5.0
   updates: 200

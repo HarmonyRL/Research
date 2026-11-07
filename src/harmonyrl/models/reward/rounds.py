@@ -62,9 +62,7 @@ def sounding_difference(melody: Melody, a: Sequence[ChordEvent], b: Sequence[Cho
 		sounding: list[tuple[int | None, frozenset[int]]] = []
 
 		for span in chord_spans(melody, merge_repeats(events, melody)):
-			sounding: list[tuple[int | None, frozenset[int]]] = []
-			for span in chord_spans(melody, merge_repeats(events, melody)):
-				sounding += [(span.bass, span.pitch_classes)] * (span.end - span.start)
+			sounding += [(span.bass, span.pitch_classes)] * (span.end - span.start)
 
 		return sounding
 
@@ -165,14 +163,9 @@ def color_groups(
 		if len(groups) == count:
 			break
 
-		prefix = prefix_split(segment)
-		if prefix is None:
-			continue
-
 		melody = segment.melody
 		plain, *pool = policy.generate(
 			[melody] * (candidates + 1),
-			prefixes=[segment.events[:prefix]] * (candidates + 1),
 			temperature=temperature,
 			generator=generator,
 		)
@@ -186,7 +179,7 @@ def color_groups(
 			items.append(pool[int(index)])
 
 		if _apart(melody, items, min_bars_apart):
-			groups.append(RankingGroup(segment, prefix, tuple(items)))
+			groups.append(RankingGroup(segment, 0, tuple(items)))
 
 	return groups
 

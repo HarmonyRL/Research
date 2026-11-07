@@ -16,7 +16,7 @@ from omegaconf import DictConfig, OmegaConf
 
 from harmonyrl.data import read_segments
 from harmonyrl.models import ChordPolicy, ChordReward
-from harmonyrl.rl import RLArguments, RLTrainer, policy_from_reference
+from harmonyrl.rl import RLArguments, RLTrainer, policy_from_reference, sharpen
 from harmonyrl.schema import Split
 
 REPO = Path(__file__).resolve().parents[2]
@@ -50,6 +50,8 @@ def main(cfg: DictConfig) -> None:
 		reward = ChordReward.from_pretrained(config["reward_model"])
 
 	reference = ChordPolicy.from_pretrained(config["reference"])
+	sharpen(reference, config["reference_temperature"])
+
 	trainer = RLTrainer(
 		policy_from_reference(reference),
 		reference,

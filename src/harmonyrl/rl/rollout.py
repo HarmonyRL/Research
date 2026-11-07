@@ -2,9 +2,11 @@
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
+from typing import cast
 
 import numpy as np
 import torch
+from torch import nn
 
 from harmonyrl.models import (
 	Batch,
@@ -33,6 +35,15 @@ def policy_from_reference(reference: ChordPolicy) -> ChordPolicy:
 	policy.load_state_dict(reference.state_dict())
 
 	return policy
+
+
+@torch.no_grad()
+def sharpen(reference: ChordPolicy, temperature: float) -> None:
+	"""Make `reference` at temperature 1 sample as it did at `temperature`."""
+	for output in reference.outputs:
+		layer = cast(nn.Linear, cast(nn.Sequential, output)[-1])
+		layer.weight.div_(temperature)
+		layer.bias.div_(temperature)
 
 
 @torch.no_grad()

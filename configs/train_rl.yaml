@@ -6,6 +6,7 @@ name: ${now:%Y%m%d-%H%M%S}
 data_dir: data/processed
 output_dir: runs/rl/${name}
 reference: runs/pretrain/final/best
+reference_temperature: 0.85
 reward_model: runs/reward/main/model
 seed: 0
 train:

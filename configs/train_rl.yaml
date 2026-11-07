@@ -12,7 +12,8 @@ seed: 0
 train:
   divergence: reverse
   reward: color
-  beta: 0.1
+  beta: 0.2
+  hold_penalty: 2.0
   clip_reward: 5.0
   updates: 200
   melodies: 32

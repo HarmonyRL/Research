@@ -31,7 +31,8 @@ class RLArguments:
 	seed: int = 0
 	divergence: str = "reverse"
 	reward: str = "color"
-	beta: float = 0.1
+	beta: float = 0.2
+	hold_penalty: float = 2.0
 	clip_reward: float = 2.0
 	updates: int = 200
 	melodies: int = 32
@@ -175,7 +176,7 @@ class RLTrainer:
 
 	def _rewards(self, samples: Sequence[Segment], segments: Sequence[Segment]) -> torch.Tensor:
 		if self.args.reward == "color":
-			return color_rewards(samples)
+			return color_rewards(samples, self.args.hold_penalty)
 		if self.args.reward == "local" or self.reward is None:
 			return local_rewards(samples, segments)
 

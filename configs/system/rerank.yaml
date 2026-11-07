@@ -5,4 +5,5 @@ kind: rerank
 reward: runs/reward/main/model
 candidates: 8
 beta: 0.0
+hold_penalty: 2.0
 clip_reward: 5.0

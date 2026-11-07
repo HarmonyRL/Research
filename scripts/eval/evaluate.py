@@ -115,7 +115,8 @@ def _rerank(
 				Segment(s.id, s.split, s.melody, tuple(events))
 				for s, group in zip(segments, drawn, strict=True)
 				for events in group
-			]
+			],
+			settings["hold_penalty"],
 		)
 	else:
 		reward = ChordReward.from_pretrained(settings["reward"]).to(_device())

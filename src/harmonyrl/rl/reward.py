@@ -4,15 +4,19 @@ from collections.abc import Sequence
 
 import torch
 
-from harmonyrl.metrics import out_of_key_share
+from harmonyrl.metrics import held_share, out_of_key_share
 from harmonyrl.models import ChordReward
 from harmonyrl.schema import ChordEvent, Melody, Segment
 
 
-def color_rewards(samples: Sequence[Segment]) -> torch.Tensor:
+def color_rewards(samples: Sequence[Segment], hold_penalty: float) -> torch.Tensor:
 	"""Reward of each sample: the share of it played by chords outside the key."""
 	return torch.tensor(
-		[out_of_key_share(s.melody, s.events) for s in samples], dtype=torch.float32
+		[
+			out_of_key_share(s.melody, s.events) - hold_penalty * held_share(s.melody, s.events)
+			for s in samples
+		],
+		dtype=torch.float32,
 	)
 
 

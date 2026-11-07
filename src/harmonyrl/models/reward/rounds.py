@@ -178,7 +178,8 @@ def color_groups(
 			index = torch.multinomial((shares / beta).softmax(dim=0), 1, generator=generator)
 			items.append(pool[int(index)])
 
-		if _apart(melody, items, min_bars_apart):
+		colored = max(out_of_key_share(melody, events) for events in items[1:])
+		if colored > out_of_key_share(melody, plain) and _apart(melody, items, min_bars_apart):
 			groups.append(RankingGroup(segment, 0, tuple(items)))
 
 	return groups

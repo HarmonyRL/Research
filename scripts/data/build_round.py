@@ -23,6 +23,7 @@ from harmonyrl.models import (
 	best_of_group,
 	color_groups,
 	head_disagreement,
+	policy_groups,
 	ranking_groups,
 	seconds,
 )
@@ -56,9 +57,9 @@ def main(cfg: DictConfig) -> None:
 	}
 	_write_json(run_dir / "meta.json", meta)
 
-	betas = config["color_betas"]
+	betas, policies = config["color_betas"], config["policies"]
 	seed, low, high = config["seed"], *config["seconds"]
-	k = 1 + len(betas) if betas else config["items"]
+	k = len(policies) if policies else 1 + len(betas) if betas else config["items"]
 
 	judged = _judged_songs(run_dir.parent)
 	segments = read_segments(
@@ -81,7 +82,21 @@ def main(cfg: DictConfig) -> None:
 	if config["reward_model"] is not None:
 		reward = ChordReward.from_pretrained(config["reward_model"]).to(device)
 
-	if betas:
+	if policies:
+		drawn = policy_groups(
+			[
+				(
+					policy_from_reference(ChordPolicy.from_pretrained(p["model"])).to(device),
+					p["temperature"],
+				)
+				for p in policies
+			],
+			pool,
+			config["groups"],
+			config["min_bars_apart"],
+			generator,
+		)
+	elif betas:
 		drawn = color_groups(
 			policy,
 			pool,
@@ -199,6 +214,7 @@ def main(cfg: DictConfig) -> None:
 			"split": config["split"],
 			"k": k,
 			"betas": betas,
+			"policies": policies,
 			"events": {letter: f"{letter}.jsonl" for letter in letters},
 			"songs": songs,
 			"unlabeled": {

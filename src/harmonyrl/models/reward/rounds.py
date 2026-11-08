@@ -185,6 +185,32 @@ def color_groups(
 	return groups
 
 
+def policy_groups(
+	policies: Sequence[tuple[ChordPolicy, float]],
+	segments: Sequence[Segment],
+	count: int,
+	min_bars_apart: int,
+	generator: torch.Generator,
+) -> list[RankingGroup]:
+	"""Up to `count` groups from `segments` in order, each with 1 harmonization by every policy at
+	its temperature, that sound different 2 by 2 for `min_bars_apart` bars or more."""
+	groups: list[RankingGroup] = []
+
+	for segment in segments:
+		if len(groups) == count:
+			break
+
+		items = tuple(
+			policy.generate([segment.melody], temperature=temperature, generator=generator)[0]
+			for policy, temperature in policies
+		)
+
+		if _apart(segment.melody, items, min_bars_apart):
+			groups.append(RankingGroup(segment, 0, items))
+
+	return groups
+
+
 def _apart(melody: Melody, items: Sequence[Sequence[ChordEvent]], min_bars_apart: int) -> bool:
 	apart = min_bars_apart * melody.meter.bar_eighths
 	return all(sounding_difference(melody, a, b) >= apart for a, b in combinations(items, 2))

@@ -19,6 +19,7 @@ candidates: 4
 best_of: 32
 best_of_share: 0.25
 color_betas: null
+policies: null
 soundfont: /usr/share/sounds/sf2/FluidR3_GM.sf2
 mscore: ~/.local/bin/mscore
 sample_rate: 44100

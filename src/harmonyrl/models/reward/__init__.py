@@ -5,6 +5,7 @@ from .model import ChordReward, RewardConfig
 from .rounds import (
 	best_of_group,
 	color_groups,
+	draw_groups,
 	head_disagreement,
 	policy_groups,
 	ranking_groups,
@@ -19,6 +20,7 @@ __all__ = [
 	"RewardTrainer",
 	"best_of_group",
 	"color_groups",
+	"draw_groups",
 	"head_disagreement",
 	"policy_groups",
 	"ranking_comparisons",

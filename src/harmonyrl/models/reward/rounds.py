@@ -18,11 +18,13 @@ from .model import ChordReward
 
 @dataclass(frozen=True)
 class RankingGroup:
-	"""Continuations, the `items`, of the first `prefix` human events of `segment`."""
+	"""Continuations, the `items`, of the first `prefix` human events of `segment`, all by the
+	`policy`-th system when they come from 1."""
 
 	segment: Segment
 	prefix: int
 	items: tuple[tuple[ChordEvent, ...], ...]
+	policy: int | None = None
 
 
 def seconds(melody: Melody) -> float:
@@ -207,6 +209,45 @@ def policy_groups(
 
 		if _apart(segment.melody, items, min_bars_apart):
 			groups.append(RankingGroup(segment, 0, items))
+
+	return groups
+
+
+def draw_groups(
+	policies: Sequence[tuple[ChordPolicy, float]],
+	segments: Sequence[Segment],
+	count: int,
+	draws: int,
+	min_bars_apart: int,
+	generator: torch.Generator,
+) -> list[RankingGroup]:
+	"""1 group of `draws` harmonizations by each policy at its temperature, for each of up to
+	`count` segments from `segments` in order whose draws of every policy sound different 2 by 2
+	for `min_bars_apart` bars or more."""
+	groups: list[RankingGroup] = []
+	songs = 0
+
+	for segment in segments:
+		if songs == count:
+			break
+
+		drawn = [
+			RankingGroup(
+				segment,
+				0,
+				tuple(
+					policy.generate(
+						[segment.melody] * draws, temperature=temperature, generator=generator
+					)
+				),
+				index,
+			)
+			for index, (policy, temperature) in enumerate(policies)
+		]
+
+		if all(_apart(segment.melody, group.items, min_bars_apart) for group in drawn):
+			groups += drawn
+			songs += 1
 
 	return groups
 

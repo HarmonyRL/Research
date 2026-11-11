@@ -22,6 +22,7 @@ from harmonyrl.models import (
 	ChordReward,
 	best_of_group,
 	color_groups,
+	draw_groups,
 	head_disagreement,
 	policy_groups,
 	ranking_groups,
@@ -57,9 +58,16 @@ def main(cfg: DictConfig) -> None:
 	}
 	_write_json(run_dir / "meta.json", meta)
 
-	betas, policies = config["color_betas"], config["policies"]
+	betas, policies, draws = config["color_betas"], config["policies"], config["draws"]
 	seed, low, high = config["seed"], *config["seconds"]
-	k = len(policies) if policies else 1 + len(betas) if betas else config["items"]
+	if policies and draws > 1:
+		k = draws
+	elif policies:
+		k = len(policies)
+	elif betas:
+		k = 1 + len(betas)
+	else:
+		k = config["items"]
 
 	judged = _judged_songs(run_dir.parent)
 	segments = read_segments(
@@ -83,19 +91,26 @@ def main(cfg: DictConfig) -> None:
 		reward = ChordReward.from_pretrained(config["reward_model"]).to(device)
 
 	if policies:
-		drawn = policy_groups(
-			[
-				(
-					policy_from_reference(ChordPolicy.from_pretrained(p["model"])).to(device),
-					p["temperature"],
-				)
-				for p in policies
-			],
-			pool,
-			config["groups"],
-			config["min_bars_apart"],
-			generator,
-		)
+		loaded = [
+			(
+				policy_from_reference(ChordPolicy.from_pretrained(p["model"])).to(device),
+				p["temperature"],
+			)
+			for p in policies
+		]
+		if draws > 1:
+			drawn = draw_groups(
+				loaded,
+				pool,
+				config["groups"] // len(policies),
+				draws,
+				config["min_bars_apart"],
+				generator,
+			)
+		else:
+			drawn = policy_groups(
+				loaded, pool, config["groups"], config["min_bars_apart"], generator
+			)
 	elif betas:
 		drawn = color_groups(
 			policy,
@@ -185,6 +200,7 @@ def main(cfg: DictConfig) -> None:
 			"split_bar": sum(e.duration for e in group.segment.events[: group.prefix]) // bar + 1,
 			"best_of": letters[0] if best_of[row] else None,
 			"disagreement": disagreement[row],
+			"policy": group.policy,
 		}
 
 	group_ids = list(songs)
@@ -215,6 +231,7 @@ def main(cfg: DictConfig) -> None:
 			"k": k,
 			"betas": betas,
 			"policies": policies,
+			"draws": draws,
 			"events": {letter: f"{letter}.jsonl" for letter in letters},
 			"songs": songs,
 			"unlabeled": {

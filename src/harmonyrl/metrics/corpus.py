@@ -11,6 +11,7 @@ from .color import out_of_key_share
 from .density import densities
 from .distributions import js_distance
 from .diversity import chord_ngrams, copy_lengths, sample_disagreement
+from .hold import held_share
 from .idiom import idiom_counts, idiom_rates
 from .structure import key_consistency, phrase_end_patterns, repeated_phrase_agreement
 from .yeh import yeh_metrics
@@ -45,6 +46,7 @@ def evaluate_corpus(
 	chord_density: list[float] = []
 	disagreement: list[float] = []
 	outside: list[float] = []
+	held: list[float] = []
 	systems: list[tuple[Segment, tuple[ChordEvent, ...]]] = []
 
 	for segment, samples in zip(segments, harmonizations, strict=True):
@@ -62,6 +64,7 @@ def evaluate_corpus(
 			repeated += repeated_phrase_agreement(melody, events)
 			in_key += key_consistency(melody, events)
 			outside.append(out_of_key_share(melody, events))
+			held.append(held_share(melody, events))
 
 			notes, chords = densities(melody, events)
 			melody_density.append(notes)
@@ -99,6 +102,7 @@ def evaluate_corpus(
 		"chords_per_bar": float(np.mean(chord_density)),
 		"density_correlation": float(np.corrcoef(melody_density, chord_density)[0, 1]),
 		"out_of_key_share": float(np.mean(outside)),
+		"held_share": float(np.mean(held)),
 		"sample_disagreement": float(np.mean(disagreement)) if disagreement else None,
 	}
 

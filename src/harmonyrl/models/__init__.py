@@ -3,7 +3,7 @@
 from .batch import Batch, collate
 from .features import event_targets, melody_features
 from .hmm import ChordHMM, HMMConfig
-from .policy import ChordPolicy, PolicyConfig, PolicyTrainer, PretrainArguments
+from .policy import ChordPolicy, GenerationConfig, PolicyConfig, PolicyTrainer, PretrainArguments
 from .reward import (
 	ChordReward,
 	RewardArguments,
@@ -27,6 +27,7 @@ __all__ = [
 	"ChordHMM",
 	"ChordPolicy",
 	"ChordReward",
+	"GenerationConfig",
 	"HMMConfig",
 	"PolicyConfig",
 	"PolicyTrainer",

@@ -1,14 +1,30 @@
-"""Import a melody from a MusicXML file."""
+"""Import a melody or a lead sheet from a MusicXML file."""
 
+from dataclasses import replace
 from fractions import Fraction
+from math import ceil
 from pathlib import Path
 
 import music21
 
-from harmonyrl.schema import Key, KeySpan, Meter, Mode, Note
+from harmonyrl.schema import (
+	MAX_DURATION,
+	ChordEvent,
+	Key,
+	KeySpan,
+	LeadSheet,
+	Meter,
+	Mode,
+	Note,
+	Section,
+	SheetPart,
+	section_from_label,
+)
 
+from .chords import chord_from_symbol
 from .common import (
 	ImportedMelody,
+	SheetImport,
 	bar_ceiling,
 	beat_tempo_from_quarter,
 	build_melody,
@@ -16,6 +32,8 @@ from .common import (
 	meter_from_ratio,
 	snap,
 )
+
+_REPEATS = (music21.bar.Repeat, music21.repeat.RepeatExpression)
 
 
 def melody_from_musicxml(
@@ -28,10 +46,91 @@ def melody_from_musicxml(
 	"""Read a monophonic melody from a MusicXML file."""
 	score = music21.converter.parse(str(path))
 	voice = _select_part(score, part)
+
 	resolved_meter = meter or _meter_from_score(score, voice)
 	tempo = _tempo_from_score(score, resolved_meter)
-	pickup = _pickup_eighths(voice)
+	notes = _voice_notes(voice, _pickup_eighths(voice))
 
+	declared = _declared_key(score, voice)
+	end = max((note.offset for note in notes), default=Fraction(0))
+	length = max(1, bar_ceiling(end, resolved_meter.bar_eighths))
+
+	signature_tonic = None if declared is None else declared.tonic
+	resolved_key = (
+		key if key is not None else estimate_key(tuple(notes), signature_tonic=signature_tonic)
+	)
+	melody = build_melody(notes, resolved_meter, (KeySpan(0, resolved_key),), length, tempo=tempo)
+
+	return ImportedMelody(melody=melody, declared_key=declared)
+
+
+def lead_sheet_from_musicxml(
+	path: Path, *, part: int | None = None, key: Key | None = None
+) -> SheetImport:
+	"""Read a lead sheet from a MusicXML file."""
+	score = music21.converter.parse(str(path))
+	voice = _select_part(score, part)
+	pickup = _pickup_eighths(voice)
+	notes = _voice_notes(voice, pickup)
+	declared = _declared_key(score, voice)
+	resolved_key = key or estimate_key(
+		tuple(notes), signature_tonic=None if declared is None else declared.tonic
+	)
+
+	starts = _part_starts(voice, pickup)
+	measures = list(voice.getElementsByClass(music21.stream.Measure))
+	written_end = (
+		pickup + _eighths(measures[-1], voice) + Fraction(measures[-1].duration.quarterLength) * 2
+	)
+	tempos = _tempos(score, pickup)
+	symbols = _chord_symbols(voice, pickup)
+
+	parts: list[SheetPart] = []
+	approximated: list[int] = []
+	first_bar = 0
+
+	for index, (start, meter, section) in enumerate(starts):
+		bar = meter.bar_eighths
+		if index + 1 < len(starts):
+			end = starts[index + 1][0]
+		else:
+			last = max([written_end, *(note.offset for note in notes)])
+			end = start + ceil((last - start) / bar) * bar
+
+		melody = build_melody(
+			[
+				Note(note.onset - start, min(note.offset, end) - note.onset, note.pitch)
+				for note in notes
+				if start <= note.onset < end
+			],
+			meter,
+			(KeySpan(0, resolved_key),),
+			end - start,
+			tempo=_tempo_at(tempos, start, meter),
+		)
+		chords, inexact = _part_chords(symbols, start, end, resolved_key)
+		parts.append(SheetPart(replace(melody, section=section), chords))
+		approximated += [first_bar + (at - start) // bar for at in inexact]
+		first_bar += (end - start) // bar
+
+	warnings = ()
+	if _has_repeats(score):
+		warnings = (
+			"repeats, endings, and jumps are ignored: the melody is read once as written, "
+			"and the output has no repeat signs",
+		)
+
+	title = score.metadata.title if score.metadata is not None else None
+	return SheetImport(
+		LeadSheet(tuple(parts), title=title or None),
+		declared_key=declared,
+		approximated=tuple(sorted(set(approximated))),
+		warnings=warnings,
+	)
+
+
+def _voice_notes(voice: music21.stream.Stream, pickup: Fraction) -> list[Note]:
+	"""Notes of `voice` in 8th notes from the barline before its pickup, ties joined."""
 	notes: list[Note] = []
 	for element in voice.recurse().notes:
 		# music21 exposes chord symbols through the notes iterator; they are
@@ -55,16 +154,103 @@ def melody_from_musicxml(
 		if duration > 0:
 			notes.append(Note(onset, duration, pitch))
 
-	declared = _declared_key(score, voice)
-	end = max((note.offset for note in notes), default=Fraction(0))
-	length = max(1, bar_ceiling(end, resolved_meter.bar_eighths))
-	signature_tonic = None if declared is None else declared.tonic
-	resolved_key = (
-		key if key is not None else estimate_key(tuple(notes), signature_tonic=signature_tonic)
-	)
-	melody = build_melody(notes, resolved_meter, (KeySpan(0, resolved_key),), length, tempo=tempo)
+	return notes
 
-	return ImportedMelody(melody=melody, declared_key=declared)
+
+def _eighths(element: music21.base.Music21Object, voice: music21.stream.Stream) -> Fraction:
+	return Fraction(element.getOffsetInHierarchy(voice)) * 2
+
+
+def _part_starts(
+	voice: music21.stream.Stream, pickup: Fraction
+) -> list[tuple[int, Meter, Section | None]]:
+	"""Where each part starts, in 8th notes, with its meter and the section its mark names."""
+	starts: list[tuple[int, Meter, Section | None]] = []
+	meter: Meter | None = None
+
+	for index, measure in enumerate(voice.getElementsByClass(music21.stream.Measure)):
+		signature = measure.timeSignature
+		changed = signature is not None and (
+			meter is None
+			or (signature.numerator, signature.denominator)
+			!= (meter.beats_per_bar, meter.beat_unit)
+		)
+		if changed:
+			meter = meter_from_ratio(signature.numerator, signature.denominator)
+		if meter is None:
+			raise ValueError("no time signature in the 1st measure of the MusicXML")
+
+		marks = list(measure.recurse().getElementsByClass(music21.expressions.RehearsalMark))
+		if index == 0 or changed or marks:
+			start = 0 if index == 0 else pickup + _eighths(measure, voice)
+			if start.denominator != 1:
+				raise ValueError(f"measure {measure.number} does not start on an 8th note")
+			section = section_from_label(str(marks[0].content)) if marks else None
+			starts.append((int(start), meter, section))
+
+	return starts
+
+
+def _tempos(score: music21.stream.Stream, pickup: Fraction) -> list[tuple[Fraction, float]]:
+	"""Quarter-note tempo marks of `score` in time order, with where they take effect."""
+	tempos = [
+		(pickup + _eighths(mark, score), float(bpm))
+		for mark in score.recurse().getElementsByClass(music21.tempo.MetronomeMark)
+		if (bpm := mark.getQuarterBPM()) is not None and bpm > 0
+	]
+	return sorted(tempos, key=lambda tempo: tempo[0])
+
+
+def _tempo_at(tempos: list[tuple[Fraction, float]], start: int, meter: Meter) -> int | None:
+	in_effect = [bpm for at, bpm in tempos if at <= start] or [bpm for _, bpm in tempos[:1]]
+	return beat_tempo_from_quarter(in_effect[-1], meter) if in_effect else None
+
+
+def _chord_symbols(
+	voice: music21.stream.Stream, pickup: Fraction
+) -> list[tuple[int, music21.harmony.ChordSymbol]]:
+	"""Chord symbols of `voice` in time order, each at the 8th note it starts on; the last of
+	several on 1 8th note wins."""
+	symbols: dict[int, music21.harmony.ChordSymbol] = {}
+	for symbol in voice.recurse().getElementsByClass(music21.harmony.ChordSymbol):
+		symbols[round(pickup + _eighths(symbol, voice))] = symbol
+
+	return sorted(symbols.items(), key=lambda item: item[0])
+
+
+def _part_chords(
+	symbols: list[tuple[int, music21.harmony.ChordSymbol]], start: int, end: int, key: Key
+) -> tuple[tuple[ChordEvent, ...] | None, list[int]]:
+	"""Chord events from `start` to `end`, with where an inexact chord starts, or None when no
+	chord symbol sounds there."""
+	before = [symbol for at, symbol in symbols if at <= start]
+	timeline: list[tuple[int, music21.harmony.ChordSymbol | None]] = [
+		(start, before[-1] if before else None),
+		*((at, symbol) for at, symbol in symbols if start < at < end),
+	]
+	if len(timeline) == 1 and timeline[0][1] is None:
+		return None, []
+
+	events: list[ChordEvent] = []
+	inexact: list[int] = []
+	for (at, symbol), (until, _) in zip(timeline, [*timeline[1:], (end, None)], strict=True):
+		chord = None
+		if symbol is not None and not isinstance(symbol, music21.harmony.NoChord):
+			chord, exact = chord_from_symbol(symbol, key)
+			if not exact:
+				inexact.append(at)
+
+		for piece in range(at, until, MAX_DURATION):
+			events.append(ChordEvent(chord, min(MAX_DURATION, until - piece)))
+
+	return tuple(events), inexact
+
+
+def _has_repeats(score: music21.stream.Stream) -> bool:
+	return bool(
+		score.recurse().getElementsByClass(_REPEATS)
+		or score.spannerBundle.getByClass(music21.spanner.RepeatBracket)
+	)
 
 
 def _pickup_eighths(voice: music21.stream.Stream) -> Fraction:

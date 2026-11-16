@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from fractions import Fraction
 from math import ceil
 
-from harmonyrl.schema import Key, KeySpan, Melody, Meter, Mode, Note
+from harmonyrl.schema import Key, KeySpan, LeadSheet, Melody, Meter, Mode, Note
 
 SNAP = Fraction(1, 48)
 """Quantization grid in 8th notes: 1/6 of a 16th, so triplets and quintuplets are exact."""
@@ -16,6 +16,18 @@ class ImportedMelody:
 
 	melody: Melody
 	declared_key: Key | None = None
+
+
+@dataclass(frozen=True)
+class SheetImport:
+	"""An imported lead sheet with the key signature the file declared (None when absent),
+	the bars whose chord symbols the vocabulary could only approximate,
+	and what else the import did not keep."""
+
+	sheet: LeadSheet
+	declared_key: Key | None = None
+	approximated: tuple[int, ...] = ()
+	warnings: tuple[str, ...] = ()
 
 
 def snap(value: Fraction) -> Fraction:

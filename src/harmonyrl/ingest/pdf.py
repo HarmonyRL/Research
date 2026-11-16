@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from homr.main import ProcessingConfig, process_image
+from homr.main import ProcessingConfig, download_weights, process_image
 from homr.music_xml_generator import XmlGeneratorArguments
 
 from harmonyrl.schema import Key, Meter
@@ -43,10 +43,18 @@ def melodies_from_pdf(
 			write_staff_positions=False,
 			read_staff_positions=False,
 			selected_staff=-1,
-			transformer_use_gpu=False,
-			segnet_use_gpu=False,
+			transformer_use_gpu=True,
+			segnet_use_gpu=True,
 			coreml_encoder=False,
+			title_detection=False,
 		)
+		# homr's wheel ships without its models; this fetches the missing ones once.
+		download_weights(
+			segnet_use_gpu=config.segnet_use_gpu,
+			transformer_use_gpu=config.transformer_use_gpu,
+			coreml_encoder=config.coreml_encoder,
+		)
+
 		results: list[ImportedMelody] = []
 		failures: list[tuple[int, Exception]] = []
 

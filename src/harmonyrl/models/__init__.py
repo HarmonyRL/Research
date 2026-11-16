@@ -1,7 +1,7 @@
 """Chord policy, preference reward, and HMM baseline, with their input features."""
 
 from .batch import Batch, collate
-from .features import event_targets, melody_features
+from .features import event_targets, melody_features, prefix_targets
 from .hmm import ChordHMM, HMMConfig
 from .policy import ChordPolicy, GenerationConfig, PolicyConfig, PolicyTrainer, PretrainArguments
 from .reward import (
@@ -43,6 +43,7 @@ __all__ = [
 	"head_disagreement",
 	"melody_features",
 	"policy_groups",
+	"prefix_targets",
 	"ranking_comparisons",
 	"ranking_groups",
 	"read_comparisons",

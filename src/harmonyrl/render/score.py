@@ -14,14 +14,22 @@ from harmonyrl.schema import ChordEvent, Key, Melody, Meter, Note
 from .symbol import chord_symbol, key_sharps, pitch_names
 from .voicing import check_tiling
 
+DEFAULT_TITLE = "HarmonyRL Result"
+"""Title of a score written without one."""
 
-def melody_to_score(melody: Melody, events: Sequence[ChordEvent]) -> music21.stream.Score:
-	"""A lead sheet of a melody with chord events: melody with chord symbols above the staff.
 
-	Key signatures are drawn at barlines only: a mid-bar key change is snapped to the next
-	barline (and dropped when it falls past the end), each change is preceded by a double
-	barline, and the score closes with a final barline."""
-	check_tiling(melody, events)
+def write_score(score: music21.stream.Score, path: Path) -> None:
+	"""Write MusicXML deterministically."""
+	if score.metadata is None or not score.metadata.title:
+		score.metadata = music21.metadata.Metadata(title=DEFAULT_TITLE)
+	score.write("musicxml", fp=str(path), makeNotation=False)
+	_normalize(path)
+
+
+def melody_to_score(melody: Melody, events: Sequence[ChordEvent] | None) -> music21.stream.Score:
+	"""A lead sheet of a melody with chord events: melody with chord symbols above the staff."""
+	if events is not None:
+		check_tiling(melody, events)
 
 	bar = melody.meter.bar_eighths
 	part = music21.stream.Part()
@@ -47,7 +55,7 @@ def melody_to_score(melody: Melody, events: Sequence[ChordEvent]) -> music21.str
 
 	symbols: list[tuple[Fraction, music21.harmony.Harmony]] = []
 	position = Fraction(0)
-	for event in events:
+	for event in events or ():
 		if event.chord is not None:
 			symbols.append((position, chord_symbol(event.chord, melody.key_at(position))))
 		else:
@@ -200,18 +208,11 @@ def _rest_events(
 	return events
 
 
-def write_score(score: music21.stream.Score, path: Path) -> None:
-	"""Write MusicXML deterministically.
-
-	Notation is fixed beforehand by `melody_to_score`, so the writer must not recompute it:
-	ChordSymbol pitches would join the accidental context and seed cautionary naturals."""
-	score.write("musicxml", fp=str(path), makeNotation=False)
-	_normalize(path)
-
-
 def _normalize(path: Path) -> None:
 	text = path.read_text(encoding="utf-8")
 	text = re.sub(r"<encoding-date>.*?</encoding-date>\n?", "", text, flags=re.DOTALL)
 	text = re.sub(r"P[0-9a-f]{32}", "P1", text)
 	text = text.replace("<voice>0</voice>", "<voice>1</voice>")
+	# music21 credits itself as the composer of a score that names none.
+	text = re.sub(r"\s*<creator type=\"composer\">Music21</creator>", "", text)
 	path.write_text(text, encoding="utf-8")

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import music21
 
+from harmonyrl.render import DEFAULT_TITLE
 from harmonyrl.schema import (
 	MAX_DURATION,
 	ChordEvent,
@@ -34,6 +35,9 @@ from .common import (
 )
 
 _REPEATS = (music21.bar.Repeat, music21.repeat.RepeatExpression)
+
+_PLACEHOLDER_TITLE = (DEFAULT_TITLE, "Music21 Fragment")
+"""Titles that stand for none."""
 
 
 def melody_from_musicxml(
@@ -120,9 +124,9 @@ def lead_sheet_from_musicxml(
 			"and the output has no repeat signs",
 		)
 
-	title = score.metadata.title if score.metadata is not None else None
+	title = score.metadata.bestTitle if score.metadata is not None else None
 	return SheetImport(
-		LeadSheet(tuple(parts), title=title or None),
+		LeadSheet(tuple(parts), title=None if title in (None, "", *_PLACEHOLDER_TITLE) else title),
 		declared_key=declared,
 		approximated=tuple(sorted(set(approximated))),
 		warnings=warnings,

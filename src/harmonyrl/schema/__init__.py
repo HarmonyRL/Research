@@ -5,6 +5,7 @@ from .key import Key, KeySpan, Mode, mode_from_intervals
 from .meter import Meter
 from .pitch import chord_pitch_classes
 from .segment import Melody, Note, Section, Segment, Split, merge_repeats, section_from_label
+from .sheet import LeadSheet, SheetPart
 from .vocab import HEAD_VALUES, allowed, no_chord_limit, project
 
 __all__ = [
@@ -13,6 +14,7 @@ __all__ = [
 	"ChordEvent",
 	"Key",
 	"KeySpan",
+	"LeadSheet",
 	"Melody",
 	"Meter",
 	"Mode",
@@ -20,6 +22,7 @@ __all__ = [
 	"RawChord",
 	"Section",
 	"Segment",
+	"SheetPart",
 	"Split",
 	"allowed",
 	"chord_pitch_classes",

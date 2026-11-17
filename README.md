@@ -13,7 +13,8 @@ listening tools. The models it produced are released for use elsewhere:
   [`harmonyrl`](https://pypi.org/project/harmonyrl/)
 - Models: [`CloudHolic/harmonyrl-chromatic`](https://huggingface.co/CloudHolic/harmonyrl-chromatic),
   [`-smooth`](https://huggingface.co/CloudHolic/harmonyrl-smooth),
-  [`-base`](https://huggingface.co/CloudHolic/harmonyrl-base)
+  [`-base`](https://huggingface.co/CloudHolic/harmonyrl-base), in the
+  [HarmonyRL collection](https://huggingface.co/collections/CloudHolic/harmonyrl)
 
 **In short.** Rewards learned from human data or from listener preferences did not pick
 outputs a listener preferred. The final reward is a product goal instead: as many chords

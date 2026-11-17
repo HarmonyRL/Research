@@ -13,7 +13,8 @@
   [`harmonyrl`](https://pypi.org/project/harmonyrl/)
 - 모델: [`CloudHolic/harmonyrl-chromatic`](https://huggingface.co/CloudHolic/harmonyrl-chromatic),
   [`-smooth`](https://huggingface.co/CloudHolic/harmonyrl-smooth),
-  [`-base`](https://huggingface.co/CloudHolic/harmonyrl-base)
+  [`-base`](https://huggingface.co/CloudHolic/harmonyrl-base),
+  [HarmonyRL 컬렉션](https://huggingface.co/collections/CloudHolic/harmonyrl)
 
 **요약.** 사람 데이터나 청취자 선호로 학습한 보상은 청취자가 더 좋아하는 출력을 고르지
 못했습니다. 그래서 최종 보상은 제품 목표로 정했습니다. 사전학습 정책에 대한 KL 페널티가 허용하는

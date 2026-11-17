@@ -14,10 +14,10 @@ import hydra
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
 
-from harmonyrl.data import read_segments
-from harmonyrl.models import ChordPolicy, ChordReward
-from harmonyrl.rl import RLArguments, RLTrainer, policy_from_reference, sharpen
-from harmonyrl.schema import Split
+from harmonyrl_research.data import read_segments
+from harmonyrl_research.models import ChordPolicy, ChordReward
+from harmonyrl_research.rl import RLArguments, RLTrainer, policy_from_reference, sharpen
+from harmonyrl_research.schema import Split
 
 REPO = Path(__file__).resolve().parents[2]
 

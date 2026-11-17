@@ -9,8 +9,8 @@ from zoneinfo import ZoneInfo
 
 import typer
 
-from harmonyrl.models import ChordPolicy, GenerationConfig
-from harmonyrl.rl import policy_from_reference
+from harmonyrl_research.models import ChordPolicy, GenerationConfig
+from harmonyrl_research.rl import policy_from_reference
 
 REPO = Path(__file__).resolve().parents[2]
 

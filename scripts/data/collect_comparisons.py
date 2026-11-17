@@ -8,7 +8,7 @@ from typing import Annotated
 
 import typer
 
-from harmonyrl.models import ranking_comparisons, write_comparisons
+from harmonyrl_research.models import ranking_comparisons, write_comparisons
 
 
 def main(round_dir: Annotated[Path, typer.Option("--round")]) -> None:

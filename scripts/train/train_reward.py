@@ -13,7 +13,7 @@ import torch
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
 
-from harmonyrl.models import (
+from harmonyrl_research.models import (
 	ChordReward,
 	RewardArguments,
 	RewardConfig,

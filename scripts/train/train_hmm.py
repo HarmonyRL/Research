@@ -12,9 +12,9 @@ import hydra
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
 
-from harmonyrl.data import read_segments
-from harmonyrl.models import ChordHMM, HMMConfig
-from harmonyrl.schema import ChordEvent, Melody, RawChord, Segment, Split, project
+from harmonyrl_research.data import read_segments
+from harmonyrl_research.models import ChordHMM, HMMConfig
+from harmonyrl_research.schema import ChordEvent, Melody, RawChord, Segment, Split, project
 
 REPO = Path(__file__).resolve().parents[2]
 

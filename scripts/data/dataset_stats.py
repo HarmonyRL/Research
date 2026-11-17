@@ -21,9 +21,9 @@ import yaml
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
 
-from harmonyrl.data import beat_value, load_json_gz, read_segments
-from harmonyrl.metrics import idiom_counts
-from harmonyrl.schema import Segment
+from harmonyrl_research.data import beat_value, load_json_gz, read_segments
+from harmonyrl_research.metrics import idiom_counts
+from harmonyrl_research.schema import Segment
 
 REPO = Path(__file__).resolve().parents[2]
 GRIDS = {"half_bar": Fraction(2), "beat": Fraction(1), "eighth": Fraction(1, 2)}

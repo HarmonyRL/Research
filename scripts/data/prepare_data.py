@@ -13,13 +13,13 @@ import yaml
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
 
-from harmonyrl.data import (
+from harmonyrl_research.data import (
 	alignment_report,
 	load_json_gz,
 	prepare_dataset,
 	write_segments,
 )
-from harmonyrl.schema import Segment, Split, project
+from harmonyrl_research.schema import Segment, Split, project
 
 REPO = Path(__file__).resolve().parents[2]
 

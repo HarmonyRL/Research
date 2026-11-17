@@ -13,9 +13,9 @@ import torch
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
 
-from harmonyrl.data import read_segments
-from harmonyrl.models import ChordPolicy, PolicyConfig, PolicyTrainer, PretrainArguments
-from harmonyrl.schema import Split
+from harmonyrl_research.data import read_segments
+from harmonyrl_research.models import ChordPolicy, PolicyConfig, PolicyTrainer, PretrainArguments
+from harmonyrl_research.schema import Split
 
 REPO = Path(__file__).resolve().parents[2]
 

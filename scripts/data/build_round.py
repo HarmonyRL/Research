@@ -16,8 +16,8 @@ import torch
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
 
-from harmonyrl.data import read_segments, write_segments
-from harmonyrl.models import (
+from harmonyrl_research.data import read_segments, write_segments
+from harmonyrl_research.models import (
 	ChordPolicy,
 	ChordReward,
 	best_of_group,
@@ -28,16 +28,16 @@ from harmonyrl.models import (
 	ranking_groups,
 	seconds,
 )
-from harmonyrl.render import (
+from harmonyrl_research.render import (
 	melody_to_score,
 	midi_to_wav,
 	musicxml_to_formats,
 	write_midi,
 	write_score,
 )
-from harmonyrl.rl import policy_from_reference
-from harmonyrl.schema import Segment, Split, merge_repeats, no_chord_limit
-from harmonyrl.tools import to_white_keys
+from harmonyrl_research.rl import policy_from_reference
+from harmonyrl_research.schema import Segment, Split, merge_repeats, no_chord_limit
+from harmonyrl_research.tools import to_white_keys
 
 REPO = Path(__file__).resolve().parents[2]
 

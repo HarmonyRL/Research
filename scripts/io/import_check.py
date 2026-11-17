@@ -9,10 +9,10 @@ from typing import Annotated
 
 import typer
 
-from harmonyrl.data import read_segments
-from harmonyrl.ingest import melody_from_midi, melody_from_mscore, melody_from_musicxml
-from harmonyrl.render import melody_to_score, musicxml_to_formats, write_midi, write_score
-from harmonyrl.schema import Melody, Mode
+from harmonyrl_research.data import read_segments
+from harmonyrl_research.ingest import melody_from_midi, melody_from_mscore, melody_from_musicxml
+from harmonyrl_research.render import melody_to_score, musicxml_to_formats, write_midi, write_score
+from harmonyrl_research.schema import Melody, Mode
 
 WORKDIR = Path("runs/import-check")
 MSCORE = Path.home() / ".local/bin/mscore"

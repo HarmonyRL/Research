@@ -8,7 +8,7 @@ from typing import Annotated
 
 import typer
 
-from harmonyrl.tools import run_preference
+from harmonyrl_research.tools import run_preference
 
 
 def main(

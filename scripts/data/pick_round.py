@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 
 import typer
 
-from harmonyrl.data import read_segments, write_segments
+from harmonyrl_research.data import read_segments, write_segments
 
 
 def main(

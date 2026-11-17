@@ -13,8 +13,8 @@ import hydra
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
 
-from harmonyrl.data import read_segments
-from harmonyrl.render import (
+from harmonyrl_research.data import read_segments
+from harmonyrl_research.render import (
 	melody_to_score,
 	midi_to_wav,
 	musicxml_to_formats,
@@ -22,7 +22,7 @@ from harmonyrl.render import (
 	write_midi,
 	write_score,
 )
-from harmonyrl.schema import Segment
+from harmonyrl_research.schema import Segment
 
 REPO = Path(__file__).resolve().parents[2]
 _SUPPORTED_FORMATS = frozenset({"midi", "wav", "mp3", "musicxml", "pdf", "png", "mscz", "mscx"})

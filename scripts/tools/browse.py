@@ -5,7 +5,7 @@ from typing import Annotated
 
 import typer
 
-from harmonyrl.tools import serve
+from harmonyrl_research.tools import serve
 
 
 def main(

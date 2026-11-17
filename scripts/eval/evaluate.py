@@ -14,11 +14,11 @@ import torch
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
 
-from harmonyrl.data import read_segments, write_segments
-from harmonyrl.metrics import evaluate_corpus
-from harmonyrl.models import ChordHMM, ChordPolicy, ChordReward
-from harmonyrl.rl import color_rewards, policy_from_reference, terminal_rewards
-from harmonyrl.schema import ChordEvent, Segment, Split
+from harmonyrl_research.data import read_segments, write_segments
+from harmonyrl_research.metrics import evaluate_corpus
+from harmonyrl_research.models import ChordHMM, ChordPolicy, ChordReward
+from harmonyrl_research.rl import color_rewards, policy_from_reference, terminal_rewards
+from harmonyrl_research.schema import ChordEvent, Segment, Split
 
 REPO = Path(__file__).resolve().parents[2]
 

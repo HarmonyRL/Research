@@ -4,6 +4,7 @@ import random
 from collections.abc import Callable, Hashable, Sequence
 from dataclasses import replace
 from fractions import Fraction
+from itertools import accumulate
 from math import ceil
 from pathlib import Path
 from typing import Any, Self
@@ -216,9 +217,7 @@ class HarmonyRL:
 				seed=None if draws is None else draws.randrange(2**32),
 				**overrides,
 			)[0]
-			current = (
-				_cut(current, 0, window_start) + drawn + _cut(current, window_end, melody.length)
-			)
+			current = _splice(current, window_start, window_end, drawn)
 			position = stop
 
 		return merge_repeats(current, melody)
@@ -341,6 +340,31 @@ def _slice(melody: Melody, start: int, end: int) -> Melody:
 	)
 
 	return replace(melody, notes=notes, keys=keys, length=end - start)
+
+
+def _splice(
+	events: Sequence[ChordEvent], start: int, end: int, middle: Sequence[ChordEvent]
+) -> tuple[ChordEvent, ...]:
+	"""`events` with `start` to `end` replaced by `middle`, a chord cut at an edge held again."""
+	length = sum(event.duration for event in events)
+	onsets = set(accumulate((event.duration for event in events), initial=0))
+	spliced: list[ChordEvent] = []
+	position = 0
+
+	for event in (*_cut(events, 0, start), *middle, *_cut(events, end, length)):
+		if (
+			spliced
+			and position in (start, end)
+			and position not in onsets
+			and event.chord == spliced[-1].chord
+		):
+			spliced[-1] = ChordEvent(event.chord, spliced[-1].duration + event.duration)
+		else:
+			spliced.append(event)
+
+		position += event.duration
+
+	return tuple(spliced)
 
 
 def _bar_span(melody: Melody, bars: range | None) -> tuple[int, int]:

@@ -1,7 +1,7 @@
 """Ranking listening sessions on a Streamlit page.
 
 When the groups CSV carries a `bars` column, each audio also gets an acceptability
-verdict and, for "문제 있음", the bar numbers that are problematic.
+verdict and, for a "problem" verdict, the bar numbers that are problematic.
 """
 
 import csv
@@ -16,7 +16,7 @@ import streamlit as st
 
 from .common import audio_format, has_score, show_score
 
-_VERDICT_LABELS = {"ok": "수용 가능", "problem": "문제 있음", "unclear": "판단 어려움"}
+_VERDICT_LABELS = {"ok": "Acceptable", "problem": "Problem", "unclear": "Unsure"}
 
 
 @dataclass(frozen=True)
@@ -73,15 +73,15 @@ def _group_page(group: Group, queue_length: int, results_path: Path, sectioned: 
 		st.error(f"audio file not found for {group.group_id}: {', '.join(str(p) for p in missing)}")
 		return
 
-	st.caption("1이 가장 좋습니다. 비슷하면 같은 순위를 고르세요.")
+	st.caption("1 is the best. Give the same rank to audios that sound alike.")
 	ranks: dict[str, int | None] = {}
 	verdicts: dict[str, str | None] = {}
 	problem_bars: dict[str, list[int]] = {}
 	for position, item in enumerate(ordered, start=1):
-		st.markdown(f"**{position}번**")
+		st.markdown(f"**#{position}**")
 		st.audio(item.path.read_bytes(), format=audio_format(item.path))
 		ranks[item.item_id] = st.radio(
-			"순위",
+			"Rank",
 			options=range(1, len(ordered) + 1),
 			index=None,
 			horizontal=True,
@@ -89,7 +89,7 @@ def _group_page(group: Group, queue_length: int, results_path: Path, sectioned: 
 		)
 		if sectioned:
 			verdicts[item.item_id] = st.radio(
-				"판정",
+				"Verdict",
 				options=list(_VERDICT_LABELS),
 				format_func=lambda code: _VERDICT_LABELS[code],
 				index=None,
@@ -98,7 +98,7 @@ def _group_page(group: Group, queue_length: int, results_path: Path, sectioned: 
 			)
 			if verdicts[item.item_id] == "problem" and item.bars is not None:
 				problem_bars[item.item_id] = st.multiselect(
-					"문제 마디",
+					"Problem bars",
 					options=range(1, item.bars + 1),
 					key=f"bars:{group.group_id}:{item.item_id}",
 				)
@@ -106,7 +106,7 @@ def _group_page(group: Group, queue_length: int, results_path: Path, sectioned: 
 	_show_scores(ordered)
 
 	started = st.session_state.group_started
-	if st.button("제출", type="primary"):
+	if st.button("Submit", type="primary"):
 		unranked = [
 			position
 			for position, item in enumerate(ordered, start=1)
@@ -118,11 +118,11 @@ def _group_page(group: Group, queue_length: int, results_path: Path, sectioned: 
 			if sectioned and verdicts.get(item.item_id) is None
 		]
 		if unranked:
-			positions = ", ".join(f"{position}번" for position in unranked)
-			st.warning(f"모든 음원에 순위를 매겨주세요: {positions}")
+			positions = ", ".join(f"#{position}" for position in unranked)
+			st.warning(f"Rank every audio: {positions}")
 		elif unjudged:
-			positions = ", ".join(f"{position}번" for position in unjudged)
-			st.warning(f"모든 음원에 판정을 매겨주세요: {positions}")
+			positions = ", ".join(f"#{position}" for position in unjudged)
+			st.warning(f"Give every audio a verdict: {positions}")
 		else:
 			_record(
 				results_path,
@@ -147,7 +147,7 @@ def _show_scores(ordered: tuple[RankItem, ...]) -> None:
 	if not any(has_score(item.path) for item in ordered):
 		return
 
-	tabs = st.tabs([f"{position}번 악보" for position in range(1, len(ordered) + 1)])
+	tabs = st.tabs([f"Score #{position}" for position in range(1, len(ordered) + 1)])
 	for tab, item in zip(tabs, ordered, strict=True):
 		with tab:
 			show_score(item.path)
@@ -157,10 +157,10 @@ def _done_page(results_path: Path) -> None:
 	rows = _read_results(results_path)
 
 	st.balloons()
-	st.header("세션 완료")
-	st.metric("그룹", len({row["group_id"] for row in rows}))
-	st.metric("음원", len(rows))
-	st.caption(f"결과: {results_path}")
+	st.header("Session complete")
+	st.metric("Groups", len({row["group_id"] for row in rows}))
+	st.metric("Audios", len(rows))
+	st.caption(f"Results: {results_path}")
 
 
 def _record(

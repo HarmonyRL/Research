@@ -59,10 +59,10 @@ def _pair_page(pair: Pair, queue_length: int, results_path: Path) -> None:
 
 	left_col, right_col = st.columns(2)
 	with left_col:
-		st.caption("왼쪽 샘플")
+		st.caption("Left sample")
 		st.audio(left.read_bytes(), format=audio_format(left))
 	with right_col:
-		st.caption("오른쪽 샘플")
+		st.caption("Right sample")
 		st.audio(right.read_bytes(), format=audio_format(right))
 
 	_show_scores(left, right)
@@ -72,15 +72,15 @@ def _pair_page(pair: Pair, queue_length: int, results_path: Path) -> None:
 	left_btn, tie_btn, right_btn = st.columns(3)
 
 	with left_btn:
-		if st.button("◀ 왼쪽 선호", width="stretch"):
+		if st.button("◀ Prefer left", width="stretch"):
 			choice = "left"
 
 	with tie_btn:
-		if st.button("둘 다 비슷함", width="stretch"):
+		if st.button("About the same", width="stretch"):
 			choice = "tie"
 
 	with right_btn:
-		if st.button("오른쪽 선호 ▶", width="stretch"):
+		if st.button("Prefer right ▶", width="stretch"):
 			choice = "right"
 
 	if choice is not None:
@@ -97,7 +97,7 @@ def _show_scores(left: Path, right: Path) -> None:
 	if not (has_score(left) or has_score(right)):
 		return
 
-	left_tab, right_tab = st.tabs(["왼쪽 악보", "오른쪽 악보"])
+	left_tab, right_tab = st.tabs(["Left score", "Right score"])
 
 	with left_tab:
 		show_score(left)
@@ -111,12 +111,12 @@ def _done_page(results_path: Path) -> None:
 	choices = [row["choice"] for row in rows]
 
 	st.balloons()
-	st.header("세션 완료")
-	st.metric("응답", len(rows))
-	st.metric("왼쪽", choices.count("left"))
-	st.metric("비슷함", choices.count("tie"))
-	st.metric("오른쪽", choices.count("right"))
-	st.caption(f"결과: {results_path}")
+	st.header("Session complete")
+	st.metric("Responses", len(rows))
+	st.metric("Left", choices.count("left"))
+	st.metric("About the same", choices.count("tie"))
+	st.metric("Right", choices.count("right"))
+	st.caption(f"Results: {results_path}")
 
 
 def _record(results_path: Path, pair: Pair, choice: str, left_is_a: bool, seconds: float) -> None:
